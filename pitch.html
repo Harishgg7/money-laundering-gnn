@@ -1,0 +1,528 @@
+<title>Follow the Money</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --bg: #eaeef3;
+    --surface: #ffffff;
+    --surface-2: #f3f6fa;
+    --ink: #111823;
+    --ink-soft: #33404f;
+    --muted: #5d6b7c;
+    --faint: #8695a6;
+    --border: #d8e0e9;
+    --border-strong: #c3cedb;
+    --accent: #0c8592;        /* teal — "our model" / primary signal */
+    --accent-deep: #0a6d78;
+    --danger: #cf3f54;        /* fraud / flagged */
+    --danger-soft: #f7e3e6;
+    --warn: #b7791a;
+    --good: #2f9e6f;
+    --series-rule: #9aa7b6;   /* rule-based bars */
+    --series-mlp: #4c7ef3;    /* mlp bars */
+    --series-gnn: #0c8592;    /* gnn bars */
+    --shadow: 0 1px 2px rgba(16,24,35,.05), 0 8px 24px rgba(16,24,35,.06);
+    --radius: 14px;
+    --maxw: 1080px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0f14;
+      --surface: #131a22;
+      --surface-2: #1a232d;
+      --ink: #e8eef5;
+      --ink-soft: #c3cede;
+      --muted: #94a3b5;
+      --faint: #6f7d8f;
+      --border: #232e3a;
+      --border-strong: #2f3d4c;
+      --accent: #2fc3d1;
+      --accent-deep: #38d1df;
+      --danger: #f2707f;
+      --danger-soft: #2a1a1f;
+      --warn: #e0a63a;
+      --good: #46c08a;
+      --series-rule: #64717f;
+      --series-mlp: #5b8cf5;
+      --series-gnn: #2fc3d1;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0b0f14;
+    --surface: #131a22;
+    --surface-2: #1a232d;
+    --ink: #e8eef5;
+    --ink-soft: #c3cede;
+    --muted: #94a3b5;
+    --faint: #6f7d8f;
+    --border: #232e3a;
+    --border-strong: #2f3d4c;
+    --accent: #2fc3d1;
+    --accent-deep: #38d1df;
+    --danger: #f2707f;
+    --danger-soft: #2a1a1f;
+    --warn: #e0a63a;
+    --good: #46c08a;
+    --series-rule: #64717f;
+    --series-mlp: #5b8cf5;
+    --series-gnn: #2fc3d1;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    font-size: 17px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px; font-weight: 500;
+    letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent-deep);
+  }
+  :root[data-theme="dark"] .eyebrow,
+  :root:not([data-theme="light"]) .eyebrow { color: var(--accent); }
+
+  h1, h2, h3 { text-wrap: balance; line-height: 1.15; margin: 0; }
+  a { color: var(--accent-deep); }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    position: relative;
+    border-bottom: 1px solid var(--border);
+    background:
+      radial-gradient(120% 90% at 85% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 60%),
+      var(--surface);
+    overflow: hidden;
+  }
+  .hero .wrap { padding-top: 76px; padding-bottom: 60px; position: relative; z-index: 1; }
+  .hero-grid {
+    position: absolute; inset: 0; z-index: 0; opacity: .5;
+  }
+  .kicker-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 26px; }
+  .badge {
+    font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: .04em;
+    color: var(--muted); border: 1px solid var(--border-strong);
+    padding: 5px 11px; border-radius: 100px; background: var(--surface-2);
+  }
+  h1 {
+    font-size: clamp(2.6rem, 6vw, 4.4rem);
+    font-weight: 700; letter-spacing: -0.03em;
+    margin: 0 0 6px;
+  }
+  .h1-sub { color: var(--accent-deep); }
+  :root[data-theme="dark"] .h1-sub,
+  :root:not([data-theme="light"]) .h1-sub { color: var(--accent); }
+  .lede {
+    font-size: clamp(1.05rem, 2vw, 1.3rem);
+    color: var(--ink-soft); max-width: 40ch; margin: 22px 0 0; font-weight: 400;
+  }
+  .authors {
+    margin-top: 30px; font-size: 14.5px; color: var(--muted);
+    display: flex; gap: 8px 18px; flex-wrap: wrap; align-items: baseline;
+  }
+  .authors b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- Section scaffolding ---------- */
+  section { padding: 60px 0; }
+  .section-head { max-width: 62ch; margin-bottom: 38px; }
+  .section-head h2 {
+    font-size: clamp(1.7rem, 3.4vw, 2.4rem); font-weight: 600;
+    letter-spacing: -0.02em; margin: 12px 0 0;
+  }
+  .section-head p { color: var(--muted); margin: 14px 0 0; font-size: 1.05rem; }
+
+  /* ---------- Problem band ---------- */
+  .band { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .contrast-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .ccard {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 26px; background: var(--surface-2);
+  }
+  .ccard.bad { border-left: 3px solid var(--danger); }
+  .ccard.good { border-left: 3px solid var(--accent); }
+  .ccard h3 { font-size: 1.15rem; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+  .ccard p { margin: 0; color: var(--ink-soft); font-size: .98rem; }
+  .tag { font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing:.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 6px; }
+  .tag.bad { color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent); }
+  .tag.good { color: var(--accent-deep); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  :root[data-theme="dark"] .tag.good, :root:not([data-theme="light"]) .tag.good { color: var(--accent); }
+
+  /* ---------- Stat strip ---------- */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .stat {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 22px; box-shadow: var(--shadow);
+  }
+  .stat .num {
+    font-family: "IBM Plex Mono", monospace; font-weight: 600;
+    font-size: clamp(1.6rem, 3.2vw, 2.15rem); letter-spacing: -0.02em;
+    color: var(--ink); font-variant-numeric: tabular-nums;
+  }
+  .stat .lbl { color: var(--muted); font-size: .86rem; margin-top: 4px; }
+
+  /* ---------- Comparison chart ---------- */
+  .chart-card {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 30px 30px 22px; box-shadow: var(--shadow);
+  }
+  .legend { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 26px; font-size: 14px; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-soft); }
+  .swatch { width: 13px; height: 13px; border-radius: 3px; display: inline-block; }
+  .metric-block { margin-bottom: 22px; }
+  .metric-block:last-child { margin-bottom: 6px; }
+  .metric-label { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; }
+  .metric-label .mname { font-weight: 600; font-size: .98rem; }
+  .metric-label .mnote { font-size: 12.5px; color: var(--faint); font-family: "IBM Plex Mono", monospace; }
+  .bars { display: flex; flex-direction: column; gap: 7px; }
+  .bar-row { display: grid; grid-template-columns: 116px 1fr; align-items: center; gap: 12px; }
+  .bar-row .who { font-size: 12.5px; color: var(--muted); font-family: "IBM Plex Mono", monospace; }
+  .bar-track { position: relative; background: var(--surface-2); border-radius: 6px; height: 26px; overflow: hidden; border: 1px solid var(--border); }
+  .bar-fill { height: 100%; border-radius: 5px 0 0 5px; display: flex; align-items: center; justify-content: flex-end;
+    transition: width .9s cubic-bezier(.2,.7,.2,1); }
+  .bar-fill .val { font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600; color: #fff; padding-right: 9px; white-space: nowrap; }
+  .bar-fill.rule { background: var(--series-rule); }
+  .bar-fill.mlp { background: var(--series-mlp); }
+  .bar-fill.gnn { background: linear-gradient(90deg, var(--accent-deep), var(--accent)); }
+  .bar-fill.tiny .val { color: var(--ink); padding-right: 0; padding-left: 9px; position: absolute; left: 100%; }
+
+  /* ---------- Pipeline ---------- */
+  .pipe { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; counter-reset: step; }
+  .pstep { position: relative; padding: 22px 18px; border: 1px solid var(--border); border-right: none; background: var(--surface); }
+  .pstep:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+  .pstep:last-child { border-right: 1px solid var(--border); border-radius: 0 var(--radius) var(--radius) 0; }
+  .pstep .n { counter-increment: step; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--accent-deep); font-weight: 600; }
+  :root[data-theme="dark"] .pstep .n, :root:not([data-theme="light"]) .pstep .n { color: var(--accent); }
+  .pstep .n::before { content: counter(step, decimal-leading-zero); }
+  .pstep h4 { margin: 8px 0 6px; font-size: .96rem; font-weight: 600; }
+  .pstep p { margin: 0; font-size: .82rem; color: var(--muted); line-height: 1.5; }
+  .pstep .arrow { position: absolute; right: -7px; top: 50%; transform: translateY(-50%); z-index: 2;
+    width: 14px; height: 14px; color: var(--faint); }
+
+  /* ---------- Audit trail case study ---------- */
+  .audit { display: grid; grid-template-columns: 1.15fr .85fr; gap: 30px; align-items: center; }
+  .audit-figure { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px; box-shadow: var(--shadow); }
+  .audit svg { width: 100%; height: auto; display: block; }
+  .case-facts { list-style: none; padding: 0; margin: 22px 0 0; }
+  .case-facts li { display: flex; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); font-size: .95rem; }
+  .case-facts li:first-child { border-top: none; }
+  .case-facts .k { font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--muted); min-width: 92px; letter-spacing: .03em; text-transform: uppercase; padding-top: 2px; }
+  .case-facts .v { color: var(--ink-soft); }
+  .case-facts .v b { color: var(--ink); }
+  .riskpill { display: inline-flex; align-items: center; gap: 8px; font-family: "IBM Plex Mono", monospace;
+    font-size: 13px; font-weight: 600; color: var(--danger); background: var(--danger-soft);
+    border: 1px solid color-mix(in srgb, var(--danger) 30%, transparent); padding: 6px 12px; border-radius: 100px; }
+
+  /* ---------- Honest / next ---------- */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .list-card { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 26px; }
+  .list-card h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+  .list-card ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .list-card li { font-size: .93rem; color: var(--ink-soft); padding-left: 20px; position: relative; }
+  .list-card li::before { content: ""; position: absolute; left: 0; top: 9px; width: 7px; height: 7px; border-radius: 2px; }
+  .list-card.limits li::before { background: var(--warn); }
+  .list-card.next li::before { background: var(--good); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  /* ---------- Footer / stack ---------- */
+  footer { border-top: 1px solid var(--border); background: var(--surface); padding: 40px 0 56px; }
+  .stack { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  .chip { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-soft);
+    border: 1px solid var(--border-strong); background: var(--surface-2); padding: 6px 12px; border-radius: 8px; }
+  .foot-note { color: var(--faint); font-size: 13px; margin-top: 26px; max-width: 70ch; }
+
+  @media (max-width: 860px) {
+    .contrast-cards, .stats, .audit, .two-col { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: 1fr 1fr; }
+    .pipe { grid-template-columns: 1fr 1fr; }
+    .pstep, .pstep:first-child, .pstep:last-child { border-radius: var(--radius); border: 1px solid var(--border); }
+    .pstep .arrow { display: none; }
+    .bar-row { grid-template-columns: 92px 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar-fill { transition: none; }
+  }
+</style>
+
+<div class="hero">
+  <svg class="hero-grid" preserveAspectRatio="none" aria-hidden="true">
+    <defs>
+      <pattern id="net" width="46" height="46" patternUnits="userSpaceOnUse">
+        <circle cx="1" cy="1" r="1" fill="currentColor" opacity=".22" />
+      </pattern>
+    </defs>
+    <rect width="100%" height="100%" fill="url(#net)" color="var(--faint)" />
+  </svg>
+  <div class="wrap">
+    <div class="kicker-row">
+      <span class="eyebrow">Explainable Graph Neural Networks</span>
+      <span class="badge">SRM IST · CSE</span>
+      <span class="badge">Anti–Money Laundering</span>
+    </div>
+    <h1>Follow the money,<br><span class="h1-sub">not just the amount.</span></h1>
+    <p class="lede">
+      A graph neural network that reads laundering as a <em>shape</em> in the payment
+      network — and explains every flag as a named trail of accounts a regulator can audit.
+    </p>
+    <div class="authors">
+      <span><b>Harish&nbsp;GG</b></span><span>·</span>
+      <span><b>Sibins&nbsp;Koshy</b></span><span>·</span>
+      <span><b>Hemakeshwar</b></span>
+      <span class="badge" style="margin-left:6px">IBM AML · HI-Small</span>
+    </div>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<section class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The compliance gap</span>
+      <h2>Today's AML systems face an impossible trade-off.</h2>
+      <p>Money laundering hides as structure — layering, smurfing, mule routing — spread across
+        chains of accounts. The tools banks use can't see structure, and the accurate ones can't explain themselves.</p>
+    </div>
+    <div class="contrast-cards">
+      <div class="ccard bad">
+        <h3><span class="tag bad">Status quo</span> Rules &amp; single-txn ML</h3>
+        <p>“Flag if&nbsp;&gt;&nbsp;₹50,000” ignores the network entirely. In our test it flagged laundering
+          with just <b>2.4% precision</b> — <b>97.6% of alerts were false alarms</b>, burying investigators.
+          Accurate black-box models can't be deployed either: regulators require a human-readable reason for every flag.</p>
+      </div>
+      <div class="ccard good">
+        <h3><span class="tag good">Our approach</span> Explainable GNN</h3>
+        <p>Model accounts as <b>nodes</b>, transactions as <b>edges</b>. A GraphSAGE network learns how money
+          <em>flows</em> across multiple hops, then <b>GNNExplainer</b> extracts the exact sub-graph of accounts
+          and transactions behind each flag — turning a black box into an audit trail.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SCALE -->
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The network we learn from</span>
+      <h2>A real payment graph, half a million accounts deep.</h2>
+      <p>IBM's synthetic AML dataset (HI-Small tier) — laundering is a needle in a haystack at 0.10% of transactions.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="num">5.08M</div><div class="lbl">transactions ingested</div></div>
+      <div class="stat"><div class="num">515,088</div><div class="lbl">accounts (graph nodes)</div></div>
+      <div class="stat"><div class="num">1.02M</div><div class="lbl">aggregated money-flow edges</div></div>
+      <div class="stat"><div class="num" style="color:var(--danger)">0.10%</div><div class="lbl">transactions laundering</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- RESULTS -->
+<section class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">The result that matters</span>
+      <h2>Structure beats scale — and beats features alone.</h2>
+      <p>Same accounts, same held-out test split. The jump from the feature-only MLP to the GNN
+        isolates what the <em>network structure</em> alone contributes.</p>
+    </div>
+    <div class="chart-card">
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--series-rule)"></i> Rule-based (amount)</span>
+        <span><i class="swatch" style="background:var(--series-mlp)"></i> MLP — features, no graph</span>
+        <span><i class="swatch" style="background:var(--series-gnn)"></i> GraphSAGE — ours</span>
+      </div>
+
+      <div class="metric-block">
+        <div class="metric-label"><span class="mname">Precision</span><span class="mnote">share of flags that are truly illicit — higher = fewer false alarms</span></div>
+        <div class="bars">
+          <div class="bar-row"><span class="who">Rule-based</span><div class="bar-track"><div class="bar-fill rule tiny" style="width:2.4%"><span class="val">0.024</span></div></div></div>
+          <div class="bar-row"><span class="who">MLP</span><div class="bar-track"><div class="bar-fill mlp" style="width:48.7%"><span class="val">0.487</span></div></div></div>
+          <div class="bar-row"><span class="who">GraphSAGE</span><div class="bar-track"><div class="bar-fill gnn" style="width:57%"><span class="val">0.570</span></div></div></div>
+        </div>
+      </div>
+
+      <div class="metric-block">
+        <div class="metric-label"><span class="mname">PR-AUC</span><span class="mnote">overall skill on the rare class — the graph nearly doubles the MLP</span></div>
+        <div class="bars">
+          <div class="bar-row"><span class="who">Rule-based</span><div class="bar-track"><div class="bar-fill rule tiny" style="width:2.1%"><span class="val">0.021</span></div></div></div>
+          <div class="bar-row"><span class="who">MLP</span><div class="bar-track"><div class="bar-fill mlp" style="width:18.4%"><span class="val">0.184</span></div></div></div>
+          <div class="bar-row"><span class="who">GraphSAGE</span><div class="bar-track"><div class="bar-fill gnn" style="width:34.2%"><span class="val">0.342</span></div></div></div>
+        </div>
+      </div>
+
+      <div class="metric-block">
+        <div class="metric-label"><span class="mname">ROC-AUC</span><span class="mnote">ranking quality across all thresholds</span></div>
+        <div class="bars">
+          <div class="bar-row"><span class="who">Rule-based</span><div class="bar-track"><div class="bar-fill rule" style="width:65.1%"><span class="val">0.651</span></div></div></div>
+          <div class="bar-row"><span class="who">MLP</span><div class="bar-track"><div class="bar-fill mlp" style="width:85.2%"><span class="val">0.852</span></div></div></div>
+          <div class="bar-row"><span class="who">GraphSAGE</span><div class="bar-track"><div class="bar-fill gnn" style="width:90.6%"><span class="val">0.906</span></div></div></div>
+        </div>
+      </div>
+
+      <div class="metric-block">
+        <div class="metric-label"><span class="mname">Recall</span><span class="mnote">share of laundering accounts caught</span></div>
+        <div class="bars">
+          <div class="bar-row"><span class="who">Rule-based</span><div class="bar-track"><div class="bar-fill rule" style="width:22%"><span class="val">0.220</span></div></div></div>
+          <div class="bar-row"><span class="who">MLP</span><div class="bar-track"><div class="bar-fill mlp" style="width:17.8%"><span class="val">0.178</span></div></div></div>
+          <div class="bar-row"><span class="who">GraphSAGE</span><div class="bar-track"><div class="bar-fill gnn" style="width:27.1%"><span class="val">0.271</span></div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PIPELINE -->
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">How it works</span>
+      <h2>Six stages, transactions to audit trail.</h2>
+    </div>
+    <div class="pipe">
+      <div class="pstep"><div class="n"></div><h4>Graph build</h4><p>5M transaction logs → a directed account graph.</p>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="pstep"><div class="n"></div><h4>Message passing</h4><p>GraphSAGE aggregates signals from each account's neighbours.</p>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="pstep"><div class="n"></div><h4>Embeddings</h4><p>Each account gets a vector encoding its multi-hop context.</p>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="pstep"><div class="n"></div><h4>Classifier</h4><p>An MLP head outputs a fraud probability, 0 → 1.</p>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="pstep"><div class="n"></div><h4>Focal loss</h4><p>Backprop weighted for the ~80:1 imbalance.</p>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      <div class="pstep"><div class="n"></div><h4>Explain</h4><p>GNNExplainer surfaces the sub-graph behind the flag.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- AUDIT TRAIL -->
+<section class="band">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Explainability, live</span>
+      <h2>One flag, fully accountable.</h2>
+      <p>The model flags account <span class="mono">80C1C8AC0</span>. Here is the exact reason it gives —
+        a fan-in structure the explainer reconstructs from the raw graph.</p>
+    </div>
+    <div class="audit">
+      <div class="audit-figure">
+        <!-- Theme-aware reconstruction of the GNNExplainer sub-graph (outputs/audit_node_496618.png) -->
+        <svg viewBox="0 0 660 470" role="img" aria-label="Audit-trail sub-graph: eight source accounts fan into one intermediary hub that forwards to the flagged account.">
+          <defs>
+            <marker id="ah" markerWidth="8" markerHeight="8" refX="6.5" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L7,3 L0,6 z" fill="var(--faint)"/>
+            </marker>
+            <marker id="ahR" markerWidth="7" markerHeight="7" refX="6" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L7,3 L0,6 z" fill="var(--danger)"/>
+            </marker>
+          </defs>
+          <!-- fan-in edges: 8 sources (x=92) -> hub (350,235) -->
+          <g fill="none" stroke="var(--faint)" stroke-width="1.4" opacity="0.7" marker-end="url(#ah)">
+            <path d="M92,44 C230,70 300,180 336,222"/>
+            <path d="M92,98 C230,120 300,190 335,225"/>
+            <path d="M92,152 C230,165 305,200 334,228"/>
+            <path d="M92,206 C220,214 300,224 333,232"/>
+            <path d="M92,262 C220,258 300,246 333,240"/>
+            <path d="M92,318 C220,300 305,262 334,246"/>
+            <path d="M92,372 C230,340 300,280 335,250"/>
+            <path d="M92,426 C240,380 300,300 337,256"/>
+          </g>
+          <!-- self-loop on hub -->
+          <path d="M338,206 C326,176 374,176 362,206" fill="none" stroke="var(--faint)" stroke-width="2.4" marker-end="url(#ah)"/>
+          <!-- hub -> flagged: the decisive, thick edge -->
+          <path d="M372,240 C460,248 500,250 542,252" fill="none" stroke="var(--danger)" stroke-width="6.5" marker-end="url(#ahR)"/>
+
+          <!-- source nodes (labels to the left) -->
+          <g font-family="IBM Plex Mono, monospace" font-size="9.5" fill="var(--muted)" text-anchor="end">
+            <g><circle cx="92" cy="44"  r="11" fill="var(--series-mlp)"/><text x="74" y="47">811A32DC0</text></g>
+            <g><circle cx="92" cy="98"  r="11" fill="var(--series-mlp)"/><text x="74" y="101">808A32010</text></g>
+            <g><circle cx="92" cy="152" r="11" fill="var(--series-mlp)"/><text x="74" y="155">803AC67E0</text></g>
+            <g><circle cx="92" cy="206" r="11" fill="var(--series-mlp)"/><text x="74" y="209">8027A9260</text></g>
+            <g><circle cx="92" cy="262" r="11" fill="var(--series-mlp)"/><text x="74" y="265">800AF8AD0</text></g>
+            <g><circle cx="92" cy="318" r="11" fill="var(--series-mlp)"/><text x="74" y="321">80A673510</text></g>
+            <g><circle cx="92" cy="372" r="11" fill="var(--series-mlp)"/><text x="74" y="375">805ABBEE0</text></g>
+            <g><circle cx="92" cy="426" r="11" fill="var(--series-mlp)"/><text x="74" y="429">800AF9FB0</text></g>
+          </g>
+          <!-- hub -->
+          <circle cx="352" cy="235" r="17" fill="var(--warn)"/>
+          <text x="352" y="204" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="600" fill="var(--ink)" text-anchor="middle">80794B6F0</text>
+          <text x="352" y="239" font-family="IBM Plex Mono, monospace" font-size="8" font-weight="600" fill="#241700" text-anchor="middle">HUB</text>
+          <!-- flagged -->
+          <circle cx="560" cy="252" r="19" fill="var(--danger)"/>
+          <text x="560" y="253" font-family="IBM Plex Mono, monospace" font-size="8" font-weight="700" fill="#fff" text-anchor="middle">FLAG</text>
+          <text x="560" y="290" font-family="IBM Plex Mono, monospace" font-size="10.5" font-weight="700" fill="var(--danger)" text-anchor="middle">80C1C8AC0</text>
+        </svg>
+      </div>
+      <div>
+        <span class="riskpill"><span class="dot" style="background:var(--danger)"></span>Fraud probability&nbsp; 0.71</span>
+        <ul class="case-facts">
+          <li><span class="k">Pattern</span><span class="v"><b>Fan-in / smurfing.</b> Eight distinct accounts funnel funds into one intermediary.</span></li>
+          <li><span class="k">Intermediary</span><span class="v">Hub <span class="mono">80794B6F0</span> collects, self-cycles, then forwards to the flagged account in one decisive transfer (the thick red edge).</span></li>
+          <li><span class="k">Why flagged</span><span class="v">Not the amount — the <b>structure</b>. No single transaction is suspicious alone.</span></li>
+          <li><span class="k">Audit value</span><span class="v">An investigator gets the <b>named accounts and flows</b> to subpoena, not just a score.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HONEST + NEXT -->
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Where it stands</span>
+      <h2>An honest prototype, with a clear road ahead.</h2>
+    </div>
+    <div class="two-col">
+      <div class="list-card limits">
+        <h3><span class="dot" style="background:var(--warn)"></span>Current limits</h3>
+        <ul>
+          <li>Recall is 27% — precision-first by design, but launderers are still missed.</li>
+          <li>Explanations skew toward self-loop signals; ~1 in 5 top flags shows a rich multi-hop chain.</li>
+          <li>Trained on the HI-Small tier only, single run — no error bars yet.</li>
+          <li>Node-level labels (account illicit if in any laundering txn), not per-transaction.</li>
+        </ul>
+      </div>
+      <div class="list-card next">
+        <h3><span class="dot" style="background:var(--good)"></span>Next steps</h3>
+        <ul>
+          <li>Temporal edge features to catch rapid layering bursts.</li>
+          <li>Scale to Medium/Large tiers with neighbour-sampled training.</li>
+          <li>Validate explanations against the dataset's labeled typologies.</li>
+          <li>Push recall with class-balanced sampling and deeper hops.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="eyebrow">Built with</span>
+    <div class="stack">
+      <span class="chip">Python 3.13</span>
+      <span class="chip">PyTorch</span>
+      <span class="chip">PyTorch Geometric</span>
+      <span class="chip">GraphSAGE · 3-hop</span>
+      <span class="chip">GNNExplainer</span>
+      <span class="chip">Focal loss α0.75 γ2</span>
+      <span class="chip">NetworkX · scikit-learn</span>
+    </div>
+    <p class="foot-note">
+      Reproducible pipeline: <span class="mono">preprocess → train → baselines → explain</span>.
+      Metrics are on a held-out 15% test split with a validation-tuned decision threshold.
+      Dataset: IBM Transactions for Anti-Money Laundering (synthetic), HI-Small tier.
+    </p>
+  </div>
+</footer>

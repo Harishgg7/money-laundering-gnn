@@ -1,0 +1,25 @@
+# Data (large CSVs & processed tensors)
+data/
+*.csv
+*.pt
+
+# Kaggle credentials — NEVER commit
+kaggle.json
+.kaggle/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+# Model checkpoints / outputs
+checkpoints/
+outputs/
+*.png
+!docs/*.png
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,15 @@
+# Core
+numpy
+pandas
+networkx
+scikit-learn
+matplotlib
+
+# Deep Learning
+torch
+
+# Graph ML (PyTorch Geometric)
+torch-geometric
+
+# Utilities
+tqdm
