@@ -43,37 +43,58 @@ def pick_demo_node(model, data, id_to_key, device, probs):
     return best_node
 
 
+def _preflight():
+    """Fail early with a helpful message if demo artifacts are missing."""
+    missing = []
+    if not config.GRAPH_PT.exists():
+        missing.append(f"  - processed graph: run  python preprocess.py")
+    if not (config.CHECKPOINT_DIR / "best_model.pt").exists():
+        missing.append(f"  - trained model:    run  python train.py")
+    if missing:
+        print("\n[!] Cannot start the demo — missing artifacts:")
+        print("\n".join(missing))
+        print("\nRun the step(s) above once, then re-run the demo.\n")
+        raise SystemExit(1)
+
+
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--node", type=int, default=None)
+    ap = argparse.ArgumentParser(description="Live AML demo driver.")
+    ap.add_argument("--node", type=int, default=None,
+                    help="explain a specific account node id")
     args = ap.parse_args()
+
+    _preflight()
 
     print(BANNER)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    print("[1/4] Loading trained model and the payment-network graph ...")
+    print("[1/4] Loading trained model and the payment-network graph ...", flush=True)
     data, model, id_to_key = load_everything(device)
     print(f"      network: {data.num_nodes:,} accounts, "
-          f"{data.num_edges:,} money-flow edges")
+          f"{data.num_edges:,} money-flow edges", flush=True)
 
-    print("[2/4] Scoring every account for laundering risk ...")
+    print("[2/4] Scoring every account for laundering risk ...", flush=True)
     t0 = time.time()
     probs = score_all(model, data, device)
     n_flagged = int((probs >= 0.5).sum())
     print(f"      scored {data.num_nodes:,} accounts in {time.time()-t0:.1f}s "
-          f"| {n_flagged:,} above 0.5 risk")
+          f"| {n_flagged:,} above 0.5 risk", flush=True)
 
     node_id = args.node if args.node is not None else \
         pick_demo_node(model, data, id_to_key, device, probs)
     print(f"[3/4] Highest-risk structural case -> account "
           f"{id_to_key.get(node_id, node_id)} "
-          f"(risk {float(probs[node_id]):.3f})")
+          f"(risk {float(probs[node_id]):.3f})", flush=True)
 
-    print("[4/4] Running GNNExplainer for the regulator-ready audit trail ...")
-    explanation = explain_node(model, data, node_id, device)
-    report(explanation, node_id, float(probs[node_id]), id_to_key, data)
+    print(f"[4/4] Running GNNExplainer on the account's 3-hop neighbourhood "
+          f"for the audit trail ...", flush=True)
+    t1 = time.time()
+    explanation, subset, sub_ei = explain_node(model, data, node_id, device)
+    print(f"      explanation computed in {time.time()-t1:.1f}s", flush=True)
+    report(explanation, node_id, float(probs[node_id]), id_to_key,
+           subset, sub_ei)
 
-    print("\nDemo complete. Audit figure saved under outputs/.")
+    print("\nDemo complete. Audit figure saved under outputs/.", flush=True)
 
 
 if __name__ == "__main__":

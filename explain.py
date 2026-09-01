@@ -38,28 +38,53 @@ def score_all(model, data, device):
     return torch.sigmoid(logits).cpu()
 
 
-def explain_node(model, data, node_id, device):
-    """Run GNNExplainer for a single node; return the Explanation object."""
+def explain_node(model, data, node_id, device, epochs=200, num_hops=None):
+    """Run GNNExplainer for a single node.
+
+    The explainer is restricted to the node's `num_hops`-hop subgraph (equal to
+    the number of GNN layers by default). For a k-layer GNN a node's prediction
+    depends only on its k-hop neighbourhood, so this is mathematically identical
+    to explaining on the full graph — but orders of magnitude faster, since each
+    optimisation step no longer forwards over all 515k nodes.
+
+    Returns (explanation, subset, sub_edge_index) where `subset` maps local
+    subgraph node ids back to original account node ids.
+    """
     from torch_geometric.explain import Explainer, GNNExplainer
+    from torch_geometric.utils import k_hop_subgraph
+
+    if num_hops is None:
+        num_hops = len(model.convs)
+
+    subset, sub_ei, mapping, _ = k_hop_subgraph(
+        int(node_id), num_hops, data.edge_index,
+        relabel_nodes=True, num_nodes=data.num_nodes)
+    sub_x = data.x[subset].to(device)
+    sub_ei = sub_ei.to(device)
+    local_index = int(mapping.item())  # new index of the seed node in `subset`
 
     explainer = Explainer(
         model=model,
-        algorithm=GNNExplainer(epochs=200),
+        algorithm=GNNExplainer(epochs=epochs),
         explanation_type="model",
         node_mask_type="attributes",
         edge_mask_type="object",
         model_config=dict(mode="binary_classification",
                           task_level="node", return_type="raw"),
     )
-    explanation = explainer(
-        data.x.to(device), data.edge_index.to(device), index=int(node_id))
-    return explanation
+    explanation = explainer(sub_x, sub_ei, index=local_index)
+    return explanation, subset.cpu().numpy(), sub_ei.cpu().numpy()
 
 
-def report(explanation, node_id, prob, id_to_key, data, top_k=10):
-    """Print + plot the most important accounts/flows behind the flag."""
+def report(explanation, node_id, prob, id_to_key, subset, edge_index, top_k=10):
+    """Print + plot the most important accounts/flows behind the flag.
+
+    `subset` maps local subgraph node ids -> original account node ids;
+    `edge_index` is the subgraph edge index (local ids).
+    """
     edge_mask = explanation.edge_mask.cpu().numpy()
-    edge_index = data.edge_index.cpu().numpy()
+    # Map local subgraph node ids back to original account node ids.
+    edge_index = subset[edge_index]
 
     # Keep only edges the explainer found genuinely important (drop the vast
     # majority at ~0, which lie outside the node's computation subgraph).
@@ -143,8 +168,9 @@ def main():
         targets = torch.topk(probs, args.top).indices.tolist()
 
     for node_id in targets:
-        explanation = explain_node(model, data, node_id, device)
-        report(explanation, node_id, float(probs[node_id]), id_to_key, data)
+        explanation, subset, sub_ei = explain_node(model, data, node_id, device)
+        report(explanation, node_id, float(probs[node_id]), id_to_key,
+               subset, sub_ei)
 
 
 if __name__ == "__main__":
