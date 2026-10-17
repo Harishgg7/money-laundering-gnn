@@ -117,10 +117,15 @@ def report(explanation, node_id, prob, id_to_key, subset, edge_index, top_k=10):
 
 
 def _plot_subgraph(node_id, key, prob, edges, id_to_key):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    import networkx as nx
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import networkx as nx
+    except ImportError:
+        print("[explain] Notice: matplotlib is not installed; skipped PNG plot generation.")
+        print("[explain] Tip: Install matplotlib to also generate audit_node_<id>.png graph.")
+        return
 
     G = nx.DiGraph()
     for s, d, w in edges:

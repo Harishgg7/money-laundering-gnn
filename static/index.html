@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Explainable GNN for Anti-Money Laundering</title>
+  <meta name="description" content="Graph Neural Network for anti-money laundering detection on digital payment networks. GraphSAGE + GNNExplainer audit trails.">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <!-- Clean Minimal Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="title-group">
+        <h1>
+          Anti-Money Laundering GNN
+          <span class="badge-tag">GraphSAGE · 3-Hop</span>
+        </h1>
+        <p>
+          <span class="authors">Harish GG · Sibins Koshy · Hemakeshwar</span> — SRM Institute of Science and Technology
+        </p>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="tab-nav" aria-label="Sections">
+      <button class="tab-btn active" data-tab="explorer" id="tabBtnExplorer">Graph &amp; Audit</button>
+      <button class="tab-btn" data-tab="typologies" id="tabBtnTypologies">Laundering Patterns</button>
+      <button class="tab-btn" data-tab="benchmarks" id="tabBtnBenchmarks">Model Benchmarks</button>
+      <button class="tab-btn" data-tab="sar" id="tabBtnSar">Audit Memo / SAR</button>
+    </nav>
+
+    <!-- System Status Indicator -->
+    <div class="header-right">
+      <span class="badge-tag" style="background:#ecfdf5; color:#059669; border-color:#a7f3d0; font-size:0.75rem;">
+        ● System Active
+      </span>
+    </div>
+  </header>
+
+  <!-- Clean Dataset & Scale Strip -->
+  <section class="data-strip" aria-label="Dataset Scale">
+    <div class="data-strip-items">
+      <div class="data-strip-item">Accounts: <b id="statTotalAccounts">515,088</b></div>
+      <div class="data-strip-item">Transactions: <b id="statRawTxns">5.08M</b></div>
+      <div class="data-strip-item">Aggregated Edges: <b id="statTotalEdges">1,015,736</b></div>
+      <div class="data-strip-item">Dataset: <b>IBM AML (HI-Small)</b></div>
+      <div class="data-strip-item">GraphSAGE Precision: <span class="green">57.0%</span> <span style="color:var(--ink-muted)">(vs 2.4% rule-based)</span></div>
+      <div class="data-strip-item">PR-AUC: <span class="green">0.342</span> <span style="color:var(--ink-muted)">(nearly 2x MLP 0.184)</span></div>
+    </div>
+  </section>
+
+  <!-- Main Content Workspace -->
+  <main class="main-content">
+
+    <!-- ====================================================================
+         TAB 1: Graph Explorer & Explainability
+         ==================================================================== -->
+    <div class="tab-pane active" id="pane-explorer">
+      <div class="layout-grid">
+
+        <!-- Left: Case Switcher & Search -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Cases &amp; Accounts</span>
+            <span class="card-meta">Select or Search</span>
+          </div>
+
+          <!-- Preset Case Studies -->
+          <div class="sidebar-section">
+            <span class="section-label">Structural Patterns</span>
+            <div class="case-btn-group">
+              <button class="case-btn active" data-node-id="496618">
+                <div class="case-title">
+                  <span>0214-80C1C8AC0</span>
+                  <span class="risk-pill">73.2%</span>
+                </div>
+                <div class="case-sub">Fan-In Smurfing Hub (Demo Case)</div>
+              </button>
+
+              <button class="case-btn" data-node-id="390632">
+                <div class="case-title">
+                  <span>0213-80C93DF00</span>
+                  <span class="risk-pill">84.9%</span>
+                </div>
+                <div class="case-sub">Structuring &amp; Dispersal (15 Outflows)</div>
+              </button>
+
+              <button class="case-btn" data-node-id="488689">
+                <div class="case-title">
+                  <span>0017708-8113EEDB0</span>
+                  <span class="risk-pill">69.3%</span>
+                </div>
+                <div class="case-sub">Cross-Bank Layering (4-Hop Chain)</div>
+              </button>
+
+              <button class="case-btn" data-node-id="147990">
+                <div class="case-title">
+                  <span>001267-8007C7660</span>
+                  <span class="risk-pill">70.0%</span>
+                </div>
+                <div class="case-sub">High-Velocity Mule Relay</div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Account Lookup -->
+          <div class="sidebar-section">
+            <span class="section-label">Search Account</span>
+            <div class="search-bar">
+              <input type="number" class="search-input" id="customNodeInput" placeholder="Node ID (0 – 515,087)" min="0" max="515087">
+              <button class="btn-sm" id="btnSearchNode">Inspect</button>
+            </div>
+          </div>
+
+          <!-- Top Flagged Accounts List -->
+          <div class="card-header" style="border-top: 1px solid var(--border);">
+            <span class="card-title">Top Flagged Accounts</span>
+            <span class="card-meta">GNN Score</span>
+          </div>
+          <div class="flagged-list" id="flaggedTableBody">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Center: Clean Canvas Graph -->
+        <div class="card canvas-wrapper">
+          <div class="canvas-toolbar">
+            <button class="tool-button" id="btnResetView">Reset View</button>
+            <button class="tool-button" id="btnZoomIn">Zoom +</button>
+            <button class="tool-button" id="btnZoomOut">Zoom −</button>
+          </div>
+
+          <div class="canvas-legend">
+            <div class="legend-item"><span class="dot red"></span> Flagged Account</div>
+            <div class="legend-item"><span class="dot amber"></span> Intermediary Hub</div>
+            <div class="legend-item"><span class="dot teal"></span> Feeder Mule / Source</div>
+            <div class="legend-item"><span class="dot slate"></span> Counterparty</div>
+          </div>
+
+          <canvas id="cleanCanvas"></canvas>
+        </div>
+
+        <!-- Right: Forensic Audit Dossier -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Audit Trail</span>
+            <span class="card-meta">GNNExplainer</span>
+          </div>
+
+          <div class="details-body">
+            <!-- Account Badge -->
+            <div class="account-overview-box">
+              <div class="account-id-row">
+                <span class="account-title-mono" id="dossierTargetKey">0214-80C1C8AC0</span>
+                <span class="risk-pill" id="dossierTargetRisk">73.2% Risk</span>
+              </div>
+              <div class="overview-grid">
+                <div class="stat-cell">
+                  <div class="label">Role</div>
+                  <div class="val" id="dossierTargetRole">Flagged Target</div>
+                </div>
+                <div class="stat-cell">
+                  <div class="label">In / Out Degree</div>
+                  <div class="val"><span id="dossierInDeg">1</span> / <span id="dossierOutDeg">1</span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Natural Language Explanation -->
+            <div class="narrative-callout" id="dossierSummary">
+              Running GNNExplainer on the 3-hop computation subgraph...
+            </div>
+
+            <!-- Evidence Table -->
+            <div>
+              <span class="section-label">Decisive Transaction Flows</span>
+              <table class="table-simple">
+                <thead>
+                  <tr>
+                    <th>From ➔ To</th>
+                    <th style="text-align:right">Weight</th>
+                  </tr>
+                </thead>
+                <tbody id="dossierEdgeList">
+                  <!-- Populated dynamically -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Quick Action: Jump to SAR -->
+            <button class="btn-inspect" style="width:100%; text-align:center; padding:9px 12px; margin-top:6px;" onclick="document.getElementById('tabBtnSar').click()">
+              Open Compliance Audit Memo (SAR)
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         TAB 2: Laundering Patterns
+         ==================================================================== -->
+    <div class="tab-pane" id="pane-typologies">
+      <div class="typology-container">
+
+        <!-- Typology 1: Fan-In Hub -->
+        <div class="typology-box">
+          <div class="typology-box-head">
+            <h3>1. Fan-In Smurfing &amp; Aggregation Hub</h3>
+            <span class="risk-pill">Account 0214-80C1C8AC0</span>
+          </div>
+
+          <div class="typology-schematic">
+            <svg viewBox="0 0 420 100" style="max-height:90px;">
+              <circle cx="40" cy="20" r="7" fill="#0c8592"/>
+              <circle cx="40" cy="45" r="7" fill="#0c8592"/>
+              <circle cx="40" cy="70" r="7" fill="#0c8592"/>
+              <path d="M48 20 Q120 30 190 45" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="3,2"/>
+              <path d="M48 45 L190 45" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="3,2"/>
+              <path d="M48 70 Q120 60 190 45" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="3,2"/>
+              <circle cx="200" cy="45" r="10" fill="#d97706"/>
+              <text x="200" y="48" fill="#fff" font-size="7" font-family="monospace" text-anchor="middle" font-weight="600">HUB</text>
+              <path d="M210 45 L340 45" fill="none" stroke="#dc2626" stroke-width="4"/>
+              <polygon points="340,41 348,45 340,49" fill="#dc2626"/>
+              <circle cx="360" cy="45" r="12" fill="#dc2626"/>
+              <text x="360" y="48" fill="#fff" font-size="7" font-family="monospace" text-anchor="middle" font-weight="600">FLAG</text>
+            </svg>
+          </div>
+
+          <p class="typology-desc">
+            8 distinct source accounts funnel funds into one intermediary collector hub (<code>0213952-80794B6F0</code>). 
+            The hub then forwards the aggregated funds in a single decisive transfer to the flagged account (attributing 82.9% GNN importance).
+          </p>
+
+          <button class="btn-inspect" onclick="document.querySelector('[data-node-id=\'496618\']').click(); document.getElementById('tabBtnExplorer').click();">
+            Load Case in Graph
+          </button>
+        </div>
+
+        <!-- Typology 2: Structuring Dispersal -->
+        <div class="typology-box">
+          <div class="typology-box-head">
+            <h3>2. Structuring &amp; Outflow Dispersal</h3>
+            <span class="risk-pill">Account 0213-80C93DF00</span>
+          </div>
+
+          <div class="typology-schematic">
+            <svg viewBox="0 0 420 100" style="max-height:90px;">
+              <circle cx="50" cy="45" r="12" fill="#dc2626"/>
+              <text x="50" y="48" fill="#fff" font-size="7" font-family="monospace" text-anchor="middle" font-weight="600">SRC</text>
+              <path d="M62 45 Q190 15 340 15" fill="none" stroke="#0c8592" stroke-width="1.8"/>
+              <path d="M62 45 L340 45" fill="none" stroke="#0c8592" stroke-width="1.8"/>
+              <path d="M62 45 Q190 75 340 75" fill="none" stroke="#0c8592" stroke-width="1.8"/>
+              <circle cx="350" cy="15" r="6" fill="#0c8592"/>
+              <circle cx="350" cy="45" r="6" fill="#0c8592"/>
+              <circle cx="350" cy="75" r="6" fill="#0c8592"/>
+            </svg>
+          </div>
+
+          <p class="typology-desc">
+            A single illicit source fractures capital into 15 concurrent sub-$10,000 transfers across nominee accounts to evade mandatory statutory reporting. 
+            The multi-hop convolution recognizes the synchronized outward fan-out signature.
+          </p>
+
+          <button class="btn-inspect" onclick="document.querySelector('[data-node-id=\'390632\']').click(); document.getElementById('tabBtnExplorer').click();">
+            Load Case in Graph
+          </button>
+        </div>
+
+        <!-- Typology 3: Multi-Hop Layering -->
+        <div class="typology-box">
+          <div class="typology-box-head">
+            <h3>3. Cross-Bank Multi-Hop Layering</h3>
+            <span class="risk-pill">Account 0017708-8113EEDB0</span>
+          </div>
+
+          <div class="typology-schematic">
+            <svg viewBox="0 0 420 100" style="max-height:90px;">
+              <circle cx="40" cy="45" r="9" fill="#0c8592"/>
+              <text x="40" y="68" fill="#64748b" font-size="7" font-family="monospace" text-anchor="middle">Bank 001</text>
+              <path d="M49 45 L125 45" fill="none" stroke="#94a3b8" stroke-width="1.8"/>
+              <circle cx="135" cy="45" r="9" fill="#475569"/>
+              <text x="135" y="68" fill="#64748b" font-size="7" font-family="monospace" text-anchor="middle">Bank 021</text>
+              <path d="M144 45 L220 45" fill="none" stroke="#94a3b8" stroke-width="1.8"/>
+              <circle cx="230" cy="45" r="9" fill="#d97706"/>
+              <text x="230" y="68" fill="#64748b" font-size="7" font-family="monospace" text-anchor="middle">Bank 070</text>
+              <path d="M239 45 L320 45" fill="none" stroke="#dc2626" stroke-width="3"/>
+              <circle cx="330" cy="45" r="11" fill="#dc2626"/>
+              <text x="330" y="68" fill="#dc2626" font-size="7" font-family="monospace" text-anchor="middle" font-weight="600">CASHOUT</text>
+            </svg>
+          </div>
+
+          <p class="typology-desc">
+            Funds hop sequentially through three distinct banking institutions. Because GraphSAGE computes 3-hop message passing, 
+            it connects the full path even though each individual bank only observes its direct counterparty.
+          </p>
+
+          <button class="btn-inspect" onclick="document.querySelector('[data-node-id=\'488689\']').click(); document.getElementById('tabBtnExplorer').click();">
+            Load Case in Graph
+          </button>
+        </div>
+
+        <!-- Typology 4: Velocity Relay -->
+        <div class="typology-box">
+          <div class="typology-box-head">
+            <h3>4. High-Velocity Pass-Through Relay</h3>
+            <span class="risk-pill">Account 001267-8007C7660</span>
+          </div>
+
+          <div class="typology-schematic">
+            <svg viewBox="0 0 420 100" style="max-height:90px;">
+              <circle cx="70" cy="45" r="9" fill="#0c8592"/>
+              <path d="M79 45 L180 45" fill="none" stroke="#94a3b8" stroke-width="2"/>
+              <circle cx="195" cy="45" r="12" fill="#dc2626"/>
+              <text x="195" y="48" fill="#fff" font-size="7" font-family="monospace" text-anchor="middle" font-weight="600">RELAY</text>
+              <path d="M207 45 L310 45" fill="none" stroke="#0c8592" stroke-width="2"/>
+              <circle cx="320" cy="45" r="8" fill="#64748b"/>
+            </svg>
+          </div>
+
+          <p class="typology-desc">
+            A mule account holding near-zero overnight balances processes 17 rapid pass-through transactions. 
+            The model flags the zero-dwell-time signature typical of transient conduit accounts.
+          </p>
+
+          <button class="btn-inspect" onclick="document.querySelector('[data-node-id=\'147990\']').click(); document.getElementById('tabBtnExplorer').click();">
+            Load Case in Graph
+          </button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         TAB 3: Model Benchmarks
+         ==================================================================== -->
+    <div class="tab-pane" id="pane-benchmarks">
+      <div class="benchmark-grid-clean">
+
+        <!-- Evaluation Table -->
+        <div class="card" style="padding:20px;">
+          <h3 class="card-title">Test Set Performance (Held-Out 15% Split)</h3>
+          <p style="font-size:0.8rem; color:var(--ink-muted); margin-top:2px;">
+            Same test accounts, same splits. Isolates the value of network structure vs. features alone.
+          </p>
+
+          <table class="metrics-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>ROC-AUC</th>
+                <th>PR-AUC</th>
+                <th>Precision</th>
+                <th>Recall</th>
+                <th>F1</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Rule-based (Amount > Thr)</td>
+                <td>0.651</td>
+                <td>0.021</td>
+                <td style="color:var(--danger)">0.024</td>
+                <td>0.220</td>
+                <td>0.044</td>
+              </tr>
+              <tr>
+                <td>MLP (Features, No Graph)</td>
+                <td>0.852</td>
+                <td>0.184</td>
+                <td>0.487</td>
+                <td>0.178</td>
+                <td>0.261</td>
+              </tr>
+              <tr class="highlight-gnn">
+                <td>GraphSAGE (Ours, 3-Hop)</td>
+                <td>0.906</td>
+                <td>0.342</td>
+                <td>0.570</td>
+                <td>0.271</td>
+                <td>0.368</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="margin-top:20px; display:flex; flex-direction:column; gap:8px; font-size:0.82rem; color:var(--ink-soft);">
+            <p>• <b>Rule-based status quo:</b> 2.4% precision means 97.6% of alerts are false alarms burying human investigators.</p>
+            <p>• <b>Graph structure value:</b> Going from the feature-only MLP to GraphSAGE nearly doubles PR-AUC (0.184 ➔ 0.342), proving laundering is structural.</p>
+            <p>• <b>Trained with focal loss:</b> &alpha;=0.75, &gamma;=2.0 to handle the extreme 80:1 class imbalance (1.23% illicit accounts).</p>
+          </div>
+        </div>
+
+        <!-- Operational Threshold Slider -->
+        <div class="card" style="padding:20px;">
+          <div style="display:flex; justify-content:space-between; align-items:baseline;">
+            <h3 class="card-title">Decision Threshold Slider</h3>
+            <span style="font-family:var(--font-mono); font-weight:600; color:var(--accent);">
+              Threshold: <span id="thDisplay">0.68</span>
+            </span>
+          </div>
+
+          <div class="sandbox-control-wrap">
+            <div class="slider-track-wrap">
+              <input type="range" id="thSlider" min="0.05" max="0.95" step="0.02" value="0.68">
+            </div>
+
+            <!-- Dynamic Numbers -->
+            <div class="sandbox-results-grid">
+              <div class="sb-metric-box">
+                <div class="m-lbl">Precision</div>
+                <div class="m-num" id="sbPrecision" style="color:var(--accent)">57.0%</div>
+              </div>
+              <div class="sb-metric-box">
+                <div class="m-lbl">Recall</div>
+                <div class="m-num" id="sbRecall">27.1%</div>
+              </div>
+              <div class="sb-metric-box">
+                <div class="m-lbl">F1 Score</div>
+                <div class="m-num" id="sbF1">0.368</div>
+              </div>
+            </div>
+
+            <div class="sandbox-results-grid">
+              <div class="sb-metric-box">
+                <div class="m-lbl">Estimated Alerts</div>
+                <div class="m-num" id="sbAlerts">482</div>
+              </div>
+              <div class="sb-metric-box">
+                <div class="m-lbl">False Alarms</div>
+                <div class="m-num" id="sbFalseAlarms" style="color:var(--danger)">207</div>
+              </div>
+              <div class="sb-metric-box">
+                <div class="m-lbl">True Launderers</div>
+                <div class="m-num" id="sbTruePositives" style="color:var(--good)">275</div>
+              </div>
+            </div>
+
+            <p style="font-size:0.8rem; color:var(--ink-muted); line-height:1.5;">
+              In extreme imbalance, default 0.5 threshold produces false-positive overload. 
+              The validation-tuned <b>0.68 threshold</b> preserves 57% precision so compliance officers only investigate credible leads.
+            </p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ====================================================================
+         TAB 4: Compliance Audit Memo / SAR
+         ==================================================================== -->
+    <div class="tab-pane" id="pane-sar">
+      <div class="sar-memo-container">
+        
+        <div class="sar-memo-header">
+          <div>
+            <h2>Suspicious Activity Report (SAR) Audit Memo</h2>
+            <div style="font-size:0.8rem; color:var(--ink-muted); margin-top:2px;">
+              Explainable GNN Investigative Audit Trail — Regulatory Dossier
+            </div>
+          </div>
+          <div class="sar-ref-no" id="sarTrackingId">SAR-GNN-2026-496618</div>
+        </div>
+
+        <!-- Subject Metadata -->
+        <table class="memo-meta-table">
+          <tr>
+            <td class="field-name">Target Account:</td>
+            <td id="sarSubjectKey" style="font-family:var(--font-mono); font-weight:600;">0214-80C1C8AC0</td>
+            <td class="field-name">Institution ID:</td>
+            <td id="sarSubjectBank" style="font-family:var(--font-mono);">BANK-0214</td>
+          </tr>
+          <tr>
+            <td class="field-name">Model Risk Score:</td>
+            <td id="sarSubjectRisk" style="font-family:var(--font-mono); font-weight:600; color:var(--danger);">73.19%</td>
+            <td class="field-name">Generated At:</td>
+            <td id="sarTimestamp" style="font-family:var(--font-mono); font-size:0.76rem;">2026-10-16 15:00 UTC</td>
+          </tr>
+        </table>
+
+        <!-- Synthesized Narrative -->
+        <div>
+          <span class="section-label">Case Narrative (GNN Reasoning)</span>
+          <div class="memo-narrative" id="sarNarrativeText">
+            Loading narrative synthesized by GNNExplainer...
+          </div>
+        </div>
+
+        <!-- Evidence Flows -->
+        <div>
+          <span class="section-label">Decisive Sub-Graph Transactions</span>
+          <table class="table-simple" style="margin-top:6px;">
+            <thead>
+              <tr>
+                <th>Transaction (Source ➔ Destination)</th>
+                <th>GNN Importance</th>
+                <th>Relationship</th>
+              </tr>
+            </thead>
+            <tbody id="sarEvidenceTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Recommendations -->
+        <div>
+          <span class="section-label">Recommended Compliance Actions</span>
+          <ul id="sarRecommendationsList" style="padding-left:18px; font-size:0.82rem; color:var(--ink-soft); display:flex; flex-direction:column; gap:4px;">
+            <li>Issue beneficial ownership subpoena under BSA Section 314(a).</li>
+            <li>Freeze outward transactions pending Tier-2 compliance review.</li>
+          </ul>
+        </div>
+
+        <!-- Action Row -->
+        <div class="action-row">
+          <button class="btn-sm" style="background:var(--surface); color:var(--ink); border:1px solid var(--border);" id="btnCopySar">Copy Text</button>
+          <button class="btn-sm" style="background:var(--surface); color:var(--ink); border:1px solid var(--border);" id="btnDownloadSar">Export JSON</button>
+          <button class="btn-sm" id="btnPrintSar">Print Memo</button>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
