@@ -1,0 +1,20 @@
+{
+  "name": "money-laundering-gnn",
+  "version": "1.0.0",
+  "description": "Explainable Graph Neural Network for Anti-Money Laundering (AML)",
+  "scripts": {
+    "dev": "python run_dashboard.py",
+    "start": "python run_dashboard.py",
+    "dashboard": "python run_dashboard.py",
+    "demo": "python demo.py --node 496618"
+  },
+  "keywords": [
+    "anti-money-laundering",
+    "graph-neural-network",
+    "gnn",
+    "graphsage",
+    "gnnexplainer"
+  ],
+  "author": "Harish GG, Sibins Koshy, Hemakeshwar",
+  "license": "MIT"
+}
