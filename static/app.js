@@ -96,9 +96,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 function resizeCanvas() {
   if (!dom.canvas) return;
   const parent = dom.canvas.parentElement;
-  dom.canvas.width = parent.clientWidth * window.devicePixelRatio;
-  dom.canvas.height = parent.clientHeight * window.devicePixelRatio;
-  dom.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const dpr = window.devicePixelRatio || 1;
+  dom.canvas.width = parent.clientWidth * dpr;
+  dom.canvas.height = parent.clientHeight * dpr;
+  dom.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   if (state.network.camera.x === 0 && state.network.camera.y === 0) {
     state.network.camera.x = parent.clientWidth / 2;
     state.network.camera.y = parent.clientHeight / 2;
@@ -176,11 +177,17 @@ function renderFlaggedList(accounts) {
   });
 }
 
+let latestExplanationRequestId = 0;
+
 async function loadAccountExplanation(nodeId) {
+  const reqId = ++latestExplanationRequestId;
   try {
     const res = await fetch(`/api/explain/${nodeId}`);
     if (!res.ok) throw new Error(`Node ${nodeId} error`);
     const data = await res.json();
+    if (reqId !== latestExplanationRequestId) {
+      return;
+    }
     state.activeNodeId = nodeId;
     state.currentExplanation = data;
 
@@ -188,7 +195,9 @@ async function loadAccountExplanation(nodeId) {
     buildCleanGraph(data);
     updateSarMemo();
   } catch (err) {
-    console.error('Explanation error:', err);
+    if (reqId === latestExplanationRequestId) {
+      console.error('Explanation error:', err);
+    }
   }
 }
 

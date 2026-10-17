@@ -58,9 +58,14 @@ def evaluate(logits, y, mask, threshold=0.5):
     if len(np.unique(y_true)) > 1:
         out["roc_auc"] = roc_auc_score(y_true, probs)
         out["pr_auc"] = average_precision_score(y_true, probs)
+        from sklearn.metrics import roc_curve
+        fpr, tpr, _ = roc_curve(y_true, probs)
+        idx = np.where(fpr <= 0.01)[0]
+        out["recall_at_1pct_fpr"] = float(tpr[idx[-1]]) if len(idx) > 0 else 0.0
     else:
         out["roc_auc"] = float("nan")
         out["pr_auc"] = float("nan")
+        out["recall_at_1pct_fpr"] = float("nan")
     y_pred = (probs >= threshold).astype(int)
     out["f1"] = f1_score(y_true, y_pred, zero_division=0)
     p, r, _, _ = precision_recall_fscore_support(
@@ -71,5 +76,7 @@ def evaluate(logits, y, mask, threshold=0.5):
 
 
 def format_metrics(m):
+    rec1 = m.get("recall_at_1pct_fpr", float("nan"))
+    rec1_str = f" | R@1%FPR {rec1:.4f}" if not np.isnan(rec1) else ""
     return (f"ROC-AUC {m['roc_auc']:.4f} | PR-AUC {m['pr_auc']:.4f} | "
-            f"F1 {m['f1']:.4f} | P {m['precision']:.4f} | R {m['recall']:.4f}")
+            f"F1 {m['f1']:.4f} | P {m['precision']:.4f} | R {m['recall']:.4f}{rec1_str}")

@@ -18,9 +18,14 @@ import config
 
 METRICS = ["roc_auc", "pr_auc", "f1", "precision", "recall"]
 LABELS = ["ROC-AUC", "PR-AUC", "F1", "Precision", "Recall"]
-COLORS = {"Rule-based (amount)": "#9aa0a6",
-          "MLP (no graph)": "#4c8bf5",
-          "GraphSAGE (ours)": "#d62728"}
+COLORS = {
+    "Rule-based (amount)": "#94a3b8",
+    "MLP (no graph)": "#60a5fa",
+    "XGBoost (Tabular)": "#f59e0b",
+    "GraphSAGE (ours)": "#3b82f6",
+    "EdgeGINE (ours)": "#ef4444",
+    "GNN + XGBoost (Hybrid)": "#10b981",
+}
 
 
 def main():

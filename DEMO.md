@@ -1,62 +1,54 @@
-# Demo Runbook — Explainable GNN for Anti-Money Laundering
+# TRACE — Demo Runbook & 4-Minute Presentation Guide
+### Graph Intelligence for Financial Crime Detection
 
-A presenter's guide for the ~7-minute teacher demo. Everything below runs on
-the project machine where the dataset, trained model, and graph already exist.
-
----
-
-## 0. Before you walk in (2-minute checklist)
-
-```bash
-cd "F:\porject ml"
-python demo.py --node 496618
-```
-
-- [ ] The command above completes and prints an **AUDIT TRAIL** table.
-- [ ] `pitch.html` opens in a browser (double-click it) — this is your visual backup.
-- [ ] `outputs\model_comparison.png` opens (your results chart).
-- [ ] Terminal font size bumped up so the class can read it.
-
-If `demo.py` says artifacts are missing, run `python preprocess.py` then
-`python train.py` once (only needed on a fresh machine).
+A presenter's guide for the live demonstration.
+The platform works completely offline via `pitch.html` (double-click to open in any modern browser) or live via the FastAPI server (`http://127.0.0.1:8000/pitch`).
 
 ---
 
-## 1. The 60-second opening (what to say first)
+## 0. Quick Pre-Demo Checklist (30 seconds)
 
-> "Money laundering doesn't look suspicious one transaction at a time — it hides
-> as a *shape* across many accounts: money split up and funnelled through mule
-> accounts. Banks today use fixed rules like 'flag anything over ₹50,000'. Those
-> drown investigators in false alarms, and the accurate AI models that exist are
-> black boxes a regulator won't accept.
->
-> We built a Graph Neural Network that treats **accounts as nodes and
-> transactions as edges**, learns the *shape* of laundering across multiple hops,
-> and — crucially — **explains every flag** as a named trail of accounts. So it's
-> both accurate *and* auditable."
+1. Open **`pitch.html`** in Chrome/Edge/Firefox or visit `http://127.0.0.1:8000/pitch`.
+2. Press **`P`** to toggle **PRESENTATION MODE** (enlarges text and graph viewport for projector screens).
+3. Verify keyboard shortcuts:
+   - **`1`** &rarr; Switch to **CASE 01** (Smurfing / Fan-In Hub)
+   - **`2`** &rarr; Switch to **CASE 02** (Inflow Aggregation Ring)
+   - **`3`** &rarr; Switch to **CASE 03** (Legitimate Retail Account)
+   - **`E`** &rarr; Trigger **[ EXPLAIN PREDICTION ]**
+   - **`R`** &rarr; Reset graph zoom and pan
 
 ---
 
-## 2. Show the problem & results (dashboard) — 2 min
+## 1. The 4-Minute Live Demo Flow
 
-Open **`pitch.html`** (local file, works offline) OR the published dashboard.
-Walk through, top to bottom:
+### 0:00 – 0:30 &bull; Introduce the Problem
+> *"In modern financial crime, individual transactions almost never look suspicious in isolation — launderers intentionally keep amounts below reporting limits. Suspicious behavior only emerges from the structural relationships between accounts."*
 
-1. **The compliance gap** — rules vs. our approach.
-2. **The results chart.** Say the one killer line:
-   > "The old rule-based approach flags laundering with **2.4% precision** — 97
-   > out of 100 alerts are false. Our GNN reaches **57%**. And moving from a
-   > plain neural net to the *graph* nearly **doubles** the score — proof it's
-   > the network structure doing the work, not just the features."
-3. Point at the **fan-in diagram** — "this is a real flagged account."
+### 0:30 – 1:00 &bull; Show the Network Graph
+> *"TRACE models accounts as nodes and money flows as directed edges across 515,000 accounts and 1,000,000+ transaction edges from the IBM AML dataset. 3-hop GraphSAGE aggregates relational context from surrounding accounts."*
 
-**Numbers to have memorised:**
+### 1:00 – 1:30 &bull; Model Comparison (MLP vs. GraphSAGE)
+> *"Both our MLP baseline and GraphSAGE share identical account-level features. The jump from 48.7% to 57.0% precision — and nearly doubling PR-AUC from 0.184 to 0.342 — isolates the exact value provided by the graph structure."*
 
-| | Rule-based | MLP (no graph) | **GNN (ours)** |
-|---|---|---|---|
-| Precision | 0.024 | 0.487 | **0.570** |
-| PR-AUC | 0.021 | 0.184 | **0.342** |
-| ROC-AUC | 0.651 | 0.852 | **0.906** |
+### 1:30 – 3:00 &bull; Click [ INVESTIGATE ACCOUNT ] (Case 01)
+> *"Let's investigate Account `0214-80C1C8AC0`. At the validation-tuned threshold of 0.378, TRACE flags this account with a 94.2% GNN conviction score. Notice the money flow animation: eight distinct feeder accounts funnel small transfers into an intermediary hub, which executes one decisive transfer into the target."*
+
+### 3:00 – 3:40 &bull; Click [ EXPLAIN PREDICTION ]
+> *"Regulators do not accept black-box predictions. GNNExplainer isolates the decisive transaction pathways with quantitative faithfulness (Fidelity+ drop of +0.1141). Compliance officers receive a court-ready audit trail naming the specific counterparties and amounts."*
+
+### 3:40 – 4:00 &bull; Press '3' to Show Legitimate Account (Case 03) & Conclude
+> *"When we inspect legitimate Account `001-800056370`, notice the stark contrast: a simple ordinary retail counterparty with low risk (12.4%) and zero suspicious patterns. The value of TRACE is not just predicting risk, but giving investigators an auditable starting point."*
+
+---
+
+## 2. Key Metrics to Have Memorized
+
+| Model | PR-AUC | Precision | Recall | F1 Score |
+|---|:---:|:---:|:---:|:---:|
+| **Rule-Based (Amount)** | 0.021 | 2.4% | 22.0% | 0.044 |
+| **MLP (No Graph)** | 0.184 | 48.7% | 17.8% | 0.261 |
+| **GraphSAGE (TRACE)** | **0.342** | **57.0%** | **27.1%** | **0.368** |
+
 
 ---
 

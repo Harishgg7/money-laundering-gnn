@@ -11,5 +11,8 @@ torch
 # Graph ML (PyTorch Geometric)
 torch-geometric
 
+# Machine Learning & Gradient Boosting
+xgboost
+
 # Utilities
 tqdm

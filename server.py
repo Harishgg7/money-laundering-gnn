@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -16,7 +18,7 @@ import pandas as pd
 import torch
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import config
@@ -31,8 +33,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=["http://127.0.0.1:8000"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -45,7 +47,9 @@ ID_TO_KEY = {}
 KEY_TO_ID = {}
 SCORES = None
 TOP_FLAGGED_CACHE: List[Dict[str, Any]] = []
-EXPLAIN_CACHE: Dict[int, Dict[str, Any]] = {}
+EXPLAIN_CACHE_MAX_SIZE = 128
+EXPLAIN_CACHE: OrderedDict[int, Dict[str, Any]] = OrderedDict()
+EXPLAIN_LOCK = threading.Lock()
 
 STATIC_DIR = config.ROOT / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -259,129 +263,139 @@ def get_explanation(node_id: int):
         raise HTTPException(status_code=404, detail=f"Account node ID {node_id} outside valid range [0, {DATA.num_nodes-1}]")
 
     if node_id in EXPLAIN_CACHE:
+        EXPLAIN_CACHE.move_to_end(node_id)
         return EXPLAIN_CACHE[node_id]
 
-    # Run GNNExplainer with fallback for irregular topologies
-    t0 = time.time()
-    try:
-        explanation, subset, sub_ei = explain_node(MODEL, DATA, node_id, DEVICE, epochs=100)
-        edge_mask = explanation.edge_mask.cpu().numpy()
-        sub_orig = subset[sub_ei]
-    except Exception as exc:
-        print(f"[AEGIS] Fallback topological attribution for node {node_id}: {exc}")
-        from torch_geometric.utils import k_hop_subgraph
-        subset_t, sub_ei_t, _, _ = k_hop_subgraph(int(node_id), 2, DATA.edge_index, relabel_nodes=True, num_nodes=DATA.num_nodes)
-        subset = subset_t.cpu().numpy()
-        sub_ei = sub_ei_t.cpu().numpy()
-        sub_orig = subset[sub_ei]
-        mask_list = []
-        for i in range(sub_orig.shape[1]):
-            s, d = int(sub_orig[0, i]), int(sub_orig[1, i])
-            if d == node_id:
-                mask_list.append(0.72)
-            elif s == node_id:
-                mask_list.append(0.50)
-            else:
-                mask_list.append(0.20)
-        edge_mask = np.array(mask_list, dtype=np.float32) if len(mask_list) > 0 else np.array([0.5], dtype=np.float32)
-    dur = time.time() - t0
+    with EXPLAIN_LOCK:
+        if node_id in EXPLAIN_CACHE:
+            EXPLAIN_CACHE.move_to_end(node_id)
+            return EXPLAIN_CACHE[node_id]
 
-    # Filter significant edges
-    eps = max(1e-3, 0.02 * float(edge_mask.max())) if len(edge_mask) > 0 else 0.001
-    keep = np.where(edge_mask >= eps)[0]
-    if len(keep) == 0:
-        keep = np.argsort(edge_mask)[::-1][:5]
-    else:
-        keep = keep[np.argsort(edge_mask[keep])[::-1][:15]]
+        # Run GNNExplainer with fallback for irregular topologies
+        t0 = time.time()
+        try:
+            res = explain_node(MODEL, DATA, node_id, DEVICE, epochs=100)
+            explanation, subset, sub_ei = res[0], res[1], res[2]
+            edge_mask = explanation.edge_mask.cpu().numpy()
+            sub_orig = subset[sub_ei]
+        except Exception as exc:
+            print(f"[AEGIS] Fallback topological attribution for node {node_id}: {exc}")
+            from torch_geometric.utils import k_hop_subgraph
+            subset_t, sub_ei_t, _, _ = k_hop_subgraph(int(node_id), 2, DATA.edge_index, relabel_nodes=True, num_nodes=DATA.num_nodes)
+            subset = subset_t.cpu().numpy()
+            sub_ei = sub_ei_t.cpu().numpy()
+            sub_orig = subset[sub_ei]
+            mask_list = []
+            for i in range(sub_orig.shape[1]):
+                s, d = int(sub_orig[0, i]), int(sub_orig[1, i])
+                if d == node_id:
+                    mask_list.append(0.72)
+                elif s == node_id:
+                    mask_list.append(0.50)
+                else:
+                    mask_list.append(0.20)
+                edge_mask = np.array(mask_list, dtype=np.float32) if len(mask_list) > 0 else np.array([0.5], dtype=np.float32)
+        dur = time.time() - t0
 
-    # Build node and edge payload
-    involved_nodes = set([node_id])
-    edges_payload = []
-
-    for e in keep:
-        s = int(sub_orig[0, e])
-        d = int(sub_orig[1, e])
-        involved_nodes.add(s)
-        involved_nodes.add(d)
-        w = float(edge_mask[e])
-        edges_payload.append({
-            "source": s,
-            "target": d,
-            "source_key": ID_TO_KEY.get(s, str(s)),
-            "target_key": ID_TO_KEY.get(d, str(d)),
-            "importance": round(w, 4),
-            "is_self_loop": s == d,
-            "is_decisive": w >= 0.5,
-        })
-
-    # Build node attributes
-    nodes_payload = []
-    for n in involved_nodes:
-        n_prob = float(SCORES[n])
-        in_deg = int((DATA.edge_index[1] == n).sum())
-        out_deg = int((DATA.edge_index[0] == n).sum())
-        key = ID_TO_KEY.get(n, str(n))
-        bank_id = key.split("-")[0] if "-" in key else "UNK"
-
-        if n == node_id:
-            role = "Target (Flagged)"
-        elif out_deg >= 5 and in_deg <= 2:
-            role = "Dispersal Source"
-        elif in_deg >= 5:
-            role = "Aggregation Hub"
-        elif in_deg >= 1 and out_deg >= 1:
-            role = "Intermediary Mule"
+        # Filter significant edges
+        eps = max(1e-3, 0.02 * float(edge_mask.max())) if len(edge_mask) > 0 else 0.001
+        keep = np.where(edge_mask >= eps)[0]
+        if len(keep) == 0:
+            keep = np.argsort(edge_mask)[::-1][:5]
         else:
-            role = "Source Account"
+            keep = keep[np.argsort(edge_mask[keep])[::-1][:15]]
 
-        nodes_payload.append({
-            "id": n,
-            "key": key,
-            "bank_id": bank_id,
-            "risk_score": round(n_prob, 4),
-            "in_degree": in_deg,
-            "out_degree": out_deg,
-            "is_target": n == node_id,
-            "is_illicit": int(DATA.y[n]) == 1,
-            "role": role,
-        })
+        # Build node and edge payload
+        involved_nodes = set([node_id])
+        edges_payload = []
 
-    target_key = ID_TO_KEY.get(node_id, str(node_id))
-    target_risk = float(SCORES[node_id])
+        for e in keep:
+            s = int(sub_orig[0, e])
+            d = int(sub_orig[1, e])
+            involved_nodes.add(s)
+            involved_nodes.add(d)
+            w = float(edge_mask[e])
+            edges_payload.append({
+                "source": s,
+                "target": d,
+                "source_key": ID_TO_KEY.get(s, str(s)),
+                "target_key": ID_TO_KEY.get(d, str(d)),
+                "importance": round(w, 4),
+                "is_self_loop": s == d,
+                "is_decisive": w >= 0.5,
+            })
 
-    # Narrative summary
-    top_w = edges_payload[0]["importance"] if edges_payload else 0.0
-    if len(edges_payload) > 0 and edges_payload[0]["source"] != node_id and top_w >= 0.5:
-        hub_key = edges_payload[0]["source_key"]
-        summary = (
-            f"Account {target_key} is heavily influenced by incoming flows from intermediary {hub_key} "
-            f"(GNNExplainer attribution: {top_w:.1%}). Multiple source accounts funnel capital into this "
-            f"intermediary before forwarding to the target."
-        )
-    elif len(edges_payload) > 5:
-        summary = (
-            f"Account {target_key} exhibits a multi-party structural topology with {len(involved_nodes)} connected accounts. "
-            f"The GNN isolated {len(edges_payload)} high-importance transaction pathways contributing to the {target_risk:.1%} risk conviction."
-        )
-    else:
-        summary = (
-            f"Account {target_key} is flagged primarily through behavioural node feature deviations and rapid self-loop cycles, "
-            f"corroborated by {len(edges_payload)} multi-hop relationships."
-        )
+        # Build node attributes
+        nodes_payload = []
+        for n in involved_nodes:
+            n_prob = float(SCORES[n])
+            in_deg = int((DATA.edge_index[1] == n).sum())
+            out_deg = int((DATA.edge_index[0] == n).sum())
+            key = ID_TO_KEY.get(n, str(n))
+            bank_id = key.split("-")[0] if "-" in key else "UNK"
 
-    res = {
-        "node_id": node_id,
-        "account_key": target_key,
-        "risk_probability": round(target_risk, 4),
-        "computation_time_seconds": round(dur, 2),
-        "total_subgraph_nodes": len(nodes_payload),
-        "total_subgraph_edges": len(edges_payload),
-        "summary": summary,
-        "nodes": nodes_payload,
-        "edges": edges_payload,
-    }
-    EXPLAIN_CACHE[node_id] = res
-    return res
+            if n == node_id:
+                role = "Target (Flagged)"
+            elif out_deg >= 5 and in_deg <= 2:
+                role = "Dispersal Source"
+            elif in_deg >= 5:
+                role = "Aggregation Hub"
+            elif in_deg >= 1 and out_deg >= 1:
+                role = "Intermediary Mule"
+            else:
+                role = "Source Account"
+
+            nodes_payload.append({
+                "id": n,
+                "key": key,
+                "bank_id": bank_id,
+                "risk_score": round(n_prob, 4),
+                "in_degree": in_deg,
+                "out_degree": out_deg,
+                "is_target": n == node_id,
+                "is_illicit": int(DATA.y[n]) == 1,
+                "role": role,
+            })
+
+        target_key = ID_TO_KEY.get(node_id, str(node_id))
+        target_risk = float(SCORES[node_id])
+
+        # Narrative summary
+        top_w = edges_payload[0]["importance"] if edges_payload else 0.0
+        if len(edges_payload) > 0 and edges_payload[0]["source"] != node_id and top_w >= 0.5:
+            hub_key = edges_payload[0]["source_key"]
+            summary = (
+                f"Account {target_key} is heavily influenced by incoming flows from intermediary {hub_key} "
+                f"(GNNExplainer attribution: {top_w:.1%}). Multiple source accounts funnel capital into this "
+                f"intermediary before forwarding to the target."
+            )
+        elif len(edges_payload) > 5:
+            summary = (
+                f"Account {target_key} exhibits a multi-party structural topology with {len(involved_nodes)} connected accounts. "
+                f"The GNN isolated {len(edges_payload)} high-importance transaction pathways contributing to the {target_risk:.1%} risk conviction."
+            )
+        else:
+            summary = (
+                f"Account {target_key} is flagged primarily through behavioural node feature deviations and rapid self-loop cycles, "
+                f"corroborated by {len(edges_payload)} multi-hop relationships."
+            )
+
+        res = {
+            "node_id": node_id,
+            "account_key": target_key,
+            "risk_probability": round(target_risk, 4),
+            "computation_time_seconds": round(dur, 2),
+            "total_subgraph_nodes": len(nodes_payload),
+            "total_subgraph_edges": len(edges_payload),
+            "summary": summary,
+            "nodes": nodes_payload,
+            "edges": edges_payload,
+        }
+        EXPLAIN_CACHE[node_id] = res
+        EXPLAIN_CACHE.move_to_end(node_id)
+        if len(EXPLAIN_CACHE) > EXPLAIN_CACHE_MAX_SIZE:
+            EXPLAIN_CACHE.popitem(last=False)
+        return res
 
 
 @app.get("/api/sar/{node_id}")
@@ -453,6 +467,26 @@ def serve_dashboard():
     if not index_file.exists():
         return HTMLResponse("<h1>AEGIS AML Dashboard Initializing... Please refresh shortly.</h1>")
     return FileResponse(index_file)
+
+
+@app.get("/pitch")
+def serve_pitch():
+    """Serve the TRACE AML Investigation Platform presentation experience."""
+    pitch_file = config.ROOT / "pitch.html"
+    if not pitch_file.exists():
+        return HTMLResponse("<h1>TRACE pitch.html not found.</h1>")
+    return FileResponse(pitch_file)
+
+
+@app.get("/api/curated_cases")
+def get_curated_cases():
+    """Serve precomputed curated cases for instant presentation loading."""
+    cases_file = config.OUTPUT_DIR / "curated_cases.json"
+    if cases_file.exists():
+        with open(cases_file, "r") as f:
+            return json.load(f)
+    return {"threshold": 0.378, "cases": {}}
+
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 

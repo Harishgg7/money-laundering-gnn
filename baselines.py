@@ -1,24 +1,24 @@
 """
 Baseline comparison: proves the GNN's value for the pitch.
 
-Compares three approaches on the SAME accounts / SAME test split:
+Compares six approaches on the SAME accounts / SAME test split:
 
-  1. Rule-based        — the industry status quo: flag accounts whose total
-                         transacted amount crosses a threshold (a stand-in for
-                         "flag if > Rs 50,000"-style rules).
-  2. MLP (no graph)    — a strong single-account ML model that uses the exact
-                         same 11 node features but IGNORES the graph structure.
-  3. GraphSAGE (ours)  — reads from checkpoints/best_model.pt (uses the graph).
+  1. Rule-based             — the industry status quo: flag accounts whose total
+                              transacted amount crosses a threshold (a stand-in for
+                              "flag if > Rs 50,000"-style rules).
+  2. MLP (no graph)         — a strong single-account ML model that uses the exact
+                              same 11 node features but IGNORES the graph structure.
+  3. XGBoost (Tabular)      — Gradient Boosted Decision Trees on raw node features.
+  4. GNN (ours)             — Trained GraphSAGE / EdgeGINE from best_model.pt.
+  5. GNN + XGBoost (Hybrid) — Combines raw node features with penultimate GNN embeddings.
 
-The gap between (2) and (3) is the money slide: it isolates how much the
-*network structure* — not just the features — contributes.
+The gaps isolate how much the network structure and edge intelligence contribute.
 
     python baselines.py
 """
 from __future__ import annotations
 
 import json
-
 import numpy as np
 import torch
 
@@ -34,11 +34,12 @@ def _metrics_dict(y_true, scores, thr):
     p, r, _, _ = precision_recall_fscore_support(
         y_true, y_pred, average="binary", zero_division=0)
     return {
-        "roc_auc": roc_auc_score(y_true, scores),
-        "pr_auc": average_precision_score(y_true, scores),
-        "f1": f1_score(y_true, y_pred, zero_division=0),
-        "precision": p,
-        "recall": r,
+        "roc_auc": float(roc_auc_score(y_true, scores)),
+        "pr_auc": float(average_precision_score(y_true, scores)),
+        "f1": float(f1_score(y_true, y_pred, zero_division=0)),
+        "precision": float(p),
+        "recall": float(r),
+        "threshold": float(thr),
     }
 
 
@@ -52,37 +53,49 @@ def _best_thr_np(y_true, scores):
 def run():
     data = torch.load(config.GRAPH_PT, weights_only=False)
     y = data.y.numpy()
-    val = data.val_mask.numpy()
-    test = data.test_mask.numpy()
+    train_mask = data.train_mask.numpy()
+    val_mask = data.val_mask.numpy()
+    test_mask = data.test_mask.numpy()
 
     results = {}
 
     # --- 1. Rule-based -------------------------------------------------------
-    # Feature 2 is (standardised, log) total amount sent; a monotone stand-in
-    # for a "large-transaction" rule. Threshold tuned on validation for fairness.
+    print("[1/5] Evaluating Rule-based baseline (amount sent) ...")
     total_sent = data.x[:, 2].numpy()
-    thr = _best_thr_np(y[val], total_sent[val])
-    results["Rule-based (amount)"] = _metrics_dict(y[test], total_sent[test], thr)
+    thr = _best_thr_np(y[val_mask], total_sent[val_mask])
+    results["Rule-based (amount)"] = _metrics_dict(y[test_mask], total_sent[test_mask], thr)
 
     # --- 2. MLP on node features (no graph) ----------------------------------
-    results["MLP (no graph)"] = _train_mlp(data, y, val, test)
+    print("[2/5] Training & evaluating MLP baseline (features only) ...")
+    results["MLP (no graph)"] = _train_mlp(data, y, val_mask, test_mask)
 
-    # --- 3. GraphSAGE (ours) -------------------------------------------------
-    results["GraphSAGE (ours)"] = _eval_gnn(data)
+    # --- 3. XGBoost on node features (Tabular Only) --------------------------
+    print("[3/5] Training & evaluating XGBoost baseline (tabular only) ...")
+    results["XGBoost (Tabular)"] = _train_xgboost_tabular(data, y, train_mask, val_mask, test_mask)
 
-    # --- Report --------------------------------------------------------------
-    print("\n" + "=" * 78)
-    print(f"{'Model':<22}{'ROC-AUC':>9}{'PR-AUC':>9}{'F1':>9}"
-          f"{'Precision':>11}{'Recall':>9}")
-    print("-" * 78)
+    # --- 4. GNN (ours) -------------------------------------------------------
+    print("[4/5] Evaluating trained GNN (best_model.pt) ...")
+    gnn_name, gnn_res = _eval_gnn(data)
+    results[gnn_name] = gnn_res
+
+    # --- 5. GNN + XGBoost Hybrid ---------------------------------------------
+    print("[5/5] Training & evaluating GNN + XGBoost Hybrid ...")
+    results["GNN + XGBoost (Hybrid)"] = _train_hybrid(data, y, train_mask, val_mask, test_mask)
+
+    # --- Clean Markdown Table Report -----------------------------------------
+    print("\n" + "=" * 80)
+    print("### Model Benchmark Comparison (IBM AML HI-Small Test Split)")
+    print("=" * 80)
+    print(f"| {'Model':<26} | {'ROC-AUC':>7} | {'PR-AUC':>7} | {'F1':>6} | {'Precision':>9} | {'Recall':>7} |")
+    print(f"|:{'-'*26}-|-{'-'*7}:|-{'-'*7}:|-{'-'*6}:|-{'-'*9}:|-{'-'*7}:|")
     for name, m in results.items():
-        print(f"{name:<22}{m['roc_auc']:>9.4f}{m['pr_auc']:>9.4f}"
-              f"{m['f1']:>9.4f}{m['precision']:>11.4f}{m['recall']:>9.4f}")
-    print("=" * 78)
+        print(f"| {name:<26} | {m['roc_auc']:>7.4f} | {m['pr_auc']:>7.4f} | "
+              f"{m['f1']:>6.4f} | {m['precision']:>9.4f} | {m['recall']:>7.4f} |")
+    print("=" * 80 + "\n")
 
     with open(config.OUTPUT_DIR / "baseline_results.json", "w") as f:
         json.dump(results, f, indent=2)
-    print(f"[done] saved -> {config.OUTPUT_DIR / 'baseline_results.json'}")
+    print(f"[done] saved results -> {config.OUTPUT_DIR / 'baseline_results.json'}")
     return results
 
 
@@ -117,20 +130,103 @@ def _train_mlp(data, y, val, test):
     return _metrics_dict(y[test], scores[test], thr)
 
 
+def _train_xgboost_tabular(data, y, train_mask, val_mask, test_mask):
+    """XGBoost trained strictly on the 11 engineered tabular node features."""
+    from xgboost import XGBClassifier
+
+    X = data.x.numpy()
+    y_train = y[train_mask]
+    n_pos = int((y_train == 1).sum())
+    n_neg = int((y_train == 0).sum())
+    spw = float(n_neg / max(1, n_pos))
+
+    clf = XGBClassifier(
+        n_estimators=100,
+        max_depth=6,
+        learning_rate=0.1,
+        scale_pos_weight=spw,
+        eval_metric="aucpr",
+        tree_method="hist",
+        random_state=config.SEED,
+        n_jobs=-1,
+    )
+    clf.fit(X[train_mask], y_train)
+    val_probs = clf.predict_proba(X[val_mask])[:, 1]
+    thr = _best_thr_np(y[val_mask], val_probs)
+    test_probs = clf.predict_proba(X[test_mask])[:, 1]
+    return _metrics_dict(y[test_mask], test_probs, thr)
+
+
 def _eval_gnn(data):
+    """Evaluate trained GNN from best_model.pt."""
     ckpt = torch.load(config.CHECKPOINT_DIR / "best_model.pt", weights_only=False)
-    # Rebuild with the architecture the checkpoint was trained with.
     saved = ckpt.get("config", {})
     for k, v in saved.items():
         setattr(config, k, v)
-    model = build_model(in_channels=ckpt["in_channels"], cfg=config)
+    edge_channels = ckpt.get("edge_channels", 6)
+    model = build_model(in_channels=ckpt["in_channels"], cfg=config, edge_channels=edge_channels)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+
+    x = data.x.to(device)
+    edge_index = data.edge_index.to(device)
+    edge_attr = data.edge_attr.to(device) if hasattr(data, "edge_attr") and data.edge_attr is not None else None
+
     with torch.no_grad():
-        logits = model(data.x, data.edge_index)
+        logits = model(x, edge_index, edge_attr).cpu()
     thr = ckpt.get("threshold") or best_threshold(logits, data.y, data.val_mask)
     m = evaluate(logits, data.y, data.test_mask, threshold=thr)
-    return {k: m[k] for k in ["roc_auc", "pr_auc", "f1", "precision", "recall"]}
+    model_name = "EdgeGINE (ours)" if getattr(config, "MODEL_TYPE", "").lower() in ["egine", "gine"] else "GraphSAGE (ours)"
+    return model_name, {k: m[k] for k in ["roc_auc", "pr_auc", "f1", "precision", "recall"]}
+
+
+def _train_hybrid(data, y, train_mask, val_mask, test_mask):
+    """GNN + XGBoost Hybrid: Concatenates tabular node features with GNN embeddings."""
+    from xgboost import XGBClassifier
+
+    ckpt = torch.load(config.CHECKPOINT_DIR / "best_model.pt", weights_only=False)
+    saved = ckpt.get("config", {})
+    for k, v in saved.items():
+        setattr(config, k, v)
+    edge_channels = ckpt.get("edge_channels", 6)
+    model = build_model(in_channels=ckpt["in_channels"], cfg=config, edge_channels=edge_channels)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+
+    x = data.x.to(device)
+    edge_index = data.edge_index.to(device)
+    edge_attr = data.edge_attr.to(device) if hasattr(data, "edge_attr") and data.edge_attr is not None else None
+
+    with torch.no_grad():
+        h = model.get_embeddings(x, edge_index, edge_attr).cpu().numpy()
+
+    X_comb = np.hstack([data.x.numpy(), h])
+    y_train = y[train_mask]
+    n_pos = int((y_train == 1).sum())
+    n_neg = int((y_train == 0).sum())
+    spw = float(n_neg / max(1, n_pos))
+
+    clf = XGBClassifier(
+        n_estimators=100,
+        max_depth=6,
+        learning_rate=0.1,
+        scale_pos_weight=spw,
+        eval_metric="aucpr",
+        tree_method="hist",
+        random_state=config.SEED,
+        n_jobs=-1,
+    )
+    clf.fit(X_comb[train_mask], y_train)
+    val_probs = clf.predict_proba(X_comb[val_mask])[:, 1]
+    thr = _best_thr_np(y[val_mask], val_probs)
+    test_probs = clf.predict_proba(X_comb[test_mask])[:, 1]
+    return _metrics_dict(y[test_mask], test_probs, thr)
 
 
 if __name__ == "__main__":

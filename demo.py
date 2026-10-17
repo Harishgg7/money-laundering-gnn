@@ -76,23 +76,29 @@ def main():
     print("[2/4] Scoring every account for laundering risk ...", flush=True)
     t0 = time.time()
     probs = score_all(model, data, device)
-    n_flagged = int((probs >= 0.5).sum())
+    threshold = float(getattr(model, "threshold", 0.378))
+    n_flagged = int((probs >= threshold).sum())
     print(f"      scored {data.num_nodes:,} accounts in {time.time()-t0:.1f}s "
-          f"| {n_flagged:,} above 0.5 risk", flush=True)
+          f"| {n_flagged:,} above validation-tuned threshold ({threshold:.3f})", flush=True)
 
     node_id = args.node if args.node is not None else \
         pick_demo_node(model, data, id_to_key, device, probs)
-    print(f"[3/4] Highest-risk structural case -> account "
-          f"{id_to_key.get(node_id, node_id)} "
-          f"(risk {float(probs[node_id]):.3f})", flush=True)
+    risk_score = float(probs[node_id])
+    status_str = "FLAGGED (SUSPICIOUS)" if risk_score >= threshold else "NORMAL (LOW RISK)"
+    print(f"[3/4] Investigation case -> account "
+          f"{id_to_key.get(node_id, node_id)} (node {node_id}) "
+          f"| Risk Score: {risk_score * 100:.1f}% [{status_str}]", flush=True)
 
     print(f"[4/4] Running GNNExplainer on the account's 3-hop neighbourhood "
           f"for the audit trail ...", flush=True)
     t1 = time.time()
-    explanation, subset, sub_ei = explain_node(model, data, node_id, device)
+    res = explain_node(model, data, node_id, device)
+    explanation, subset, sub_ei = res[0], res[1], res[2]
+    sub_x, sub_ei_t, sub_ea_t, local_idx = res[3], res[4], res[5], res[6]
     print(f"      explanation computed in {time.time()-t1:.1f}s", flush=True)
     report(explanation, node_id, float(probs[node_id]), id_to_key,
-           subset, sub_ei)
+           subset, sub_ei, sub_x=sub_x, sub_ei_tensor=sub_ei_t,
+           sub_ea_tensor=sub_ea_t, local_index=local_idx)
 
     print("\nDemo complete. Audit figure saved under outputs/.", flush=True)
 
