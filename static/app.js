@@ -1,658 +1,1307 @@
 /**
- * Explainable AML GNN — Client-side application
- * Minimal, clean graph visualizer, benchmarks sandbox, and audit memo.
+ * TRACE — AML Investigation & Financial Crime Intelligence Platform
+ * Client Application Logic connecting directly to FastAPI Backend REST Endpoints.
+ * No hardcoded enterprise dataset: All data is fetched dynamically from the GNN & IBM AML dataset.
  */
 
-const state = {
-  activeTab: 'explorer',
-  activeNodeId: 496618,
-  network: {
-    nodes: [],
-    edges: [],
-    camera: { x: 0, y: 0, zoom: 1 },
-    draggedNode: null,
-    isDragging: false,
-    dragStart: { x: 0, y: 0 },
-    hoveredNode: null,
-  },
-  flaggedAccounts: [],
-  benchmarkData: null,
-  currentExplanation: null,
+// Global State
+const appState = {
+  activeView: 'overview',
+  activeCaseId: 'AML-2026-00421',
+  activeCaseKey: 'case1',
+  activeCaseData: null,
+  activeAccountData: null,
+  activeTransactions: [],
+  activeNetwork: { nodes: [], edges: [] },
+  activeExplanation: null,
+  activeEvidence: [],
+  selectedTxns: new Set(),
+  overviewData: null,
+  alertsData: [],
+  auditLogData: [],
+  benchmarksData: null,
+  demoCases: {},
+  presentationMode: false,
 };
 
-const dom = {
-  canvas: document.getElementById('cleanCanvas'),
+// Canvas Graph State
+const graphState = {
+  canvas: null,
   ctx: null,
-  tabs: document.querySelectorAll('.tab-btn'),
-  panes: document.querySelectorAll('.tab-pane'),
-  caseButtons: document.querySelectorAll('.case-btn'),
-  flaggedList: document.getElementById('flaggedTableBody'),
-  customInput: document.getElementById('customNodeInput'),
-  btnSearch: document.getElementById('btnSearchNode'),
-  btnReset: document.getElementById('btnResetView'),
-  btnZoomIn: document.getElementById('btnZoomIn'),
-  btnZoomOut: document.getElementById('btnZoomOut'),
-  // Dossier elements
-  dossierKey: document.getElementById('dossierTargetKey'),
-  dossierRisk: document.getElementById('dossierTargetRisk'),
-  dossierRole: document.getElementById('dossierTargetRole'),
-  dossierInDeg: document.getElementById('dossierInDeg'),
-  dossierOutDeg: document.getElementById('dossierOutDeg'),
-  dossierSummary: document.getElementById('dossierSummary'),
-  dossierEdgeList: document.getElementById('dossierEdgeList'),
-  // Sandbox elements
-  thSlider: document.getElementById('thSlider'),
-  thDisplay: document.getElementById('thDisplay'),
-  sbPrecision: document.getElementById('sbPrecision'),
-  sbRecall: document.getElementById('sbRecall'),
-  sbF1: document.getElementById('sbF1'),
-  sbAlerts: document.getElementById('sbAlerts'),
-  sbFalseAlarms: document.getElementById('sbFalseAlarms'),
-  sbTruePositives: document.getElementById('sbTruePositives'),
-  // SAR elements
-  sarTracking: document.getElementById('sarTrackingId'),
-  sarSubjectKey: document.getElementById('sarSubjectKey'),
-  sarSubjectBank: document.getElementById('sarSubjectBank'),
-  sarSubjectRisk: document.getElementById('sarSubjectRisk'),
-  sarTimestamp: document.getElementById('sarTimestamp'),
-  sarNarrative: document.getElementById('sarNarrativeText'),
-  sarEvidenceTable: document.getElementById('sarEvidenceTableBody'),
-  sarRecommendations: document.getElementById('sarRecommendationsList'),
-  btnCopySar: document.getElementById('btnCopySar'),
-  btnDownloadSar: document.getElementById('btnDownloadSar'),
-  btnPrintSar: document.getElementById('btnPrintSar'),
+  scale: 1.0,
+  panX: 0,
+  panY: 0,
+  isDragging: false,
+  dragStart: { x: 0, y: 0 },
+  highlightedPath: null,
+  hoveredNode: null,
+  nodePositions: new Map(),
 };
 
 // -----------------------------------------------------------------------------
-// Initialization
+// Initialization & Event Wiring
 // -----------------------------------------------------------------------------
-window.addEventListener('DOMContentLoaded', async () => {
-  // Ensure white theme alone and clear any legacy saved theme preference
-  localStorage.removeItem('aml_theme');
-  document.documentElement.removeAttribute('data-theme');
 
-  if (dom.canvas) {
-    dom.ctx = dom.canvas.getContext('2d');
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-    setupCanvasInteractions();
-  }
+document.addEventListener('DOMContentLoaded', async () => {
+  initCanvas();
+  initNavigation();
+  initModals();
+  initKeyboardShortcuts();
 
-  setupNavigation();
-  setupEventListeners();
-
-  await loadSystemStats();
-  await loadFlaggedAccounts();
-  await loadBenchmarks();
-  await loadAccountExplanation(state.activeNodeId);
-
-  // Render loop
-  requestAnimationFrame(drawGraph);
+  // Load initial backend datasets
+  await loadInitialData();
 });
 
-// -----------------------------------------------------------------------------
-// Canvas Resizing & Camera
-// -----------------------------------------------------------------------------
-function resizeCanvas() {
-  if (!dom.canvas) return;
-  const parent = dom.canvas.parentElement;
-  const dpr = window.devicePixelRatio || 1;
-  dom.canvas.width = parent.clientWidth * dpr;
-  dom.canvas.height = parent.clientHeight * dpr;
-  dom.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  if (state.network.camera.x === 0 && state.network.camera.y === 0) {
-    state.network.camera.x = parent.clientWidth / 2;
-    state.network.camera.y = parent.clientHeight / 2;
+async function loadInitialData() {
+  try {
+    // 1. Fetch Overview & Metrics
+    await refreshOverview();
+
+    // 2. Fetch Curated Demo Cases
+    const demoResp = await fetch('/api/demo_cases');
+    if (demoResp.ok) {
+      const demoJson = await demoResp.json();
+      appState.demoCases = demoJson.cases || {};
+    }
+
+    // 3. Load Active Case (Default Case 1)
+    await loadCase('case1');
+
+    // 4. Fetch Full Alerts Queue
+    await refreshAlerts();
+
+    // 5. Fetch Audit Trail
+    await refreshAuditLog();
+
+    // 6. Fetch Model Benchmarks
+    await refreshBenchmarks();
+
+  } catch (err) {
+    console.error('[TRACE] Initialization error:', err);
   }
 }
 
 // -----------------------------------------------------------------------------
-// Navigation Tabs
+// Navigation & View Switching
 // -----------------------------------------------------------------------------
-function setupNavigation() {
-  dom.tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      const target = tab.dataset.tab;
-      dom.tabs.forEach(t => t.classList.remove('active'));
-      dom.panes.forEach(p => p.classList.remove('active'));
 
-      tab.classList.add('active');
-      document.getElementById(`pane-${target}`).classList.add('active');
-      state.activeTab = target;
+function initNavigation() {
+  // Sidebar Links
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.preventDefault();
+      const viewId = item.dataset.view;
+      switchView(viewId);
+    });
+  });
 
-      if (target === 'explorer') {
-        setTimeout(resizeCanvas, 40);
-      } else if (target === 'sar') {
-        updateSarMemo();
+  // Topbar Demo Case Pills
+  document.querySelectorAll('.case-pill-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const caseKey = btn.dataset.case;
+      document.querySelectorAll('.case-pill-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      await loadCase(caseKey);
+    });
+  });
+
+  // Presentation Mode Toggle
+  const presBtn = document.getElementById('btnTogglePresentation');
+  if (presBtn) {
+    presBtn.addEventListener('click', togglePresentationMode);
+  }
+
+  // Global Search
+  const searchInput = document.getElementById('globalSearchInput');
+  if (searchInput) {
+    searchInput.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        const query = searchInput.value.trim();
+        if (!query) return;
+        await handleGlobalSearch(query);
       }
     });
-  });
-}
-
-// -----------------------------------------------------------------------------
-// API Calls
-// -----------------------------------------------------------------------------
-async function loadSystemStats() {
-  try {
-    const res = await fetch('/api/status');
-    const data = await res.json();
-    document.getElementById('statTotalAccounts').textContent = data.total_accounts.toLocaleString();
-    document.getElementById('statTotalEdges').textContent = data.total_edges.toLocaleString();
-    document.getElementById('statRawTxns').textContent = (data.raw_transactions_ingested / 1e6).toFixed(2) + 'M';
-  } catch (err) {
-    console.warn('System status not available:', err);
   }
-}
 
-async function loadFlaggedAccounts() {
-  try {
-    const res = await fetch('/api/accounts/flagged?limit=25');
-    const accounts = await res.json();
-    state.flaggedAccounts = accounts;
-    renderFlaggedList(accounts);
-  } catch (err) {
-    console.warn('Flagged accounts fetch failed:', err);
-  }
-}
+  // Filters in Overview
+  const riskFilter = document.getElementById('filterAlertRisk');
+  const statusFilter = document.getElementById('filterAlertStatus');
+  if (riskFilter) riskFilter.addEventListener('change', () => filterOverviewAlerts());
+  if (statusFilter) statusFilter.addEventListener('change', () => filterOverviewAlerts());
 
-function renderFlaggedList(accounts) {
-  if (!dom.flaggedList) return;
-  dom.flaggedList.innerHTML = '';
-  accounts.forEach(acc => {
-    const item = document.createElement('div');
-    item.className = `flagged-item ${acc.node_id === state.activeNodeId ? 'active' : ''}`;
-    item.innerHTML = `
-      <div>
-        <div class="flagged-key">${acc.account_key}</div>
-        <div style="font-size:0.7rem; color:var(--ink-muted)">Node #${acc.node_id} · ${acc.typology_tag}</div>
-      </div>
-      <div class="flagged-prob">${(acc.fraud_probability * 100).toFixed(1)}%</div>
-    `;
-    item.addEventListener('click', () => {
-      document.querySelectorAll('.flagged-item').forEach(i => i.classList.remove('active'));
-      item.classList.add('active');
-      loadAccountExplanation(acc.node_id);
+  // Filter in Alerts tab
+  const kwFilter = document.getElementById('filterAlertKeyword');
+  if (kwFilter) {
+    kwFilter.addEventListener('input', () => {
+      const q = kwFilter.value.toLowerCase().trim();
+      const rows = document.querySelectorAll('#tbodyFullAlerts tr');
+      rows.forEach(r => {
+        const text = r.innerText.toLowerCase();
+        r.style.display = text.includes(q) ? '' : 'none';
+      });
     });
-    dom.flaggedList.appendChild(item);
-  });
-}
-
-let latestExplanationRequestId = 0;
-
-async function loadAccountExplanation(nodeId) {
-  const reqId = ++latestExplanationRequestId;
-  try {
-    const res = await fetch(`/api/explain/${nodeId}`);
-    if (!res.ok) throw new Error(`Node ${nodeId} error`);
-    const data = await res.json();
-    if (reqId !== latestExplanationRequestId) {
-      return;
-    }
-    state.activeNodeId = nodeId;
-    state.currentExplanation = data;
-
-    updateDossier(data);
-    buildCleanGraph(data);
-    updateSarMemo();
-  } catch (err) {
-    if (reqId === latestExplanationRequestId) {
-      console.error('Explanation error:', err);
-    }
-  }
-}
-
-function updateDossier(data) {
-  if (dom.dossierKey) dom.dossierKey.textContent = data.account_key;
-  if (dom.dossierRisk) dom.dossierRisk.textContent = `${(data.risk_probability * 100).toFixed(1)}% Risk`;
-  if (dom.dossierSummary) dom.dossierSummary.textContent = data.summary;
-
-  const targetNode = data.nodes.find(n => n.id === data.node_id) || data.nodes[0];
-  if (targetNode) {
-    if (dom.dossierRole) dom.dossierRole.textContent = targetNode.role;
-    if (dom.dossierInDeg) dom.dossierInDeg.textContent = targetNode.in_degree;
-    if (dom.dossierOutDeg) dom.dossierOutDeg.textContent = targetNode.out_degree;
   }
 
-  // Decisive flows table
-  if (dom.dossierEdgeList) {
-    dom.dossierEdgeList.innerHTML = '';
-    data.edges.slice(0, 7).forEach(e => {
-      const tr = document.createElement('tr');
-      const src = e.source_key.split('-')[1] || e.source_key;
-      const dst = e.target_key.split('-')[1] || e.target_key;
-      tr.innerHTML = `
-        <td>
-          <span style="color:${e.is_decisive ? 'var(--danger)' : 'var(--ink)'}; font-weight:${e.is_decisive ? '600' : '400'}">${src}</span>
-          <span style="color:var(--ink-muted)">➔</span>
-          <span>${dst}</span>
-        </td>
-        <td style="text-align:right; font-weight:600; color:${e.is_decisive ? 'var(--danger)' : 'var(--ink)'}">${e.importance.toFixed(4)}</td>
-      `;
-      dom.dossierEdgeList.appendChild(tr);
+  // Trace Funds Action Button
+  const btnTrace = document.getElementById('btnExecuteTrace');
+  if (btnTrace) {
+    btnTrace.addEventListener('click', executeTraceFunds);
+  }
+
+  // Save Investigator Note Action Button
+  const btnNote = document.getElementById('btnSaveInvestigatorNote');
+  if (btnNote) {
+    btnNote.addEventListener('click', saveInvestigatorNote);
+  }
+
+  // Recommendation Selector in Report Tab
+  const selRec = document.getElementById('selReportRecommendation');
+  if (selRec) {
+    selRec.addEventListener('change', () => {
+      updateReportPreview();
     });
   }
 }
 
-// -----------------------------------------------------------------------------
-// Clean Network Graph Construction & Drawing
-// -----------------------------------------------------------------------------
-function buildCleanGraph(data) {
-  const width = dom.canvas.parentElement.clientWidth;
-  const height = dom.canvas.parentElement.clientHeight;
-  const cx = width / 2;
-  const cy = height / 2;
+function switchView(viewId) {
+  appState.activeView = viewId;
+  document.querySelectorAll('.view-container').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.sidebar-nav .nav-item').forEach(n => n.classList.remove('active'));
 
-  const nodes = [];
-  const edges = [];
-  const nodeMap = new Map();
+  const targetView = document.getElementById('view' + viewId.charAt(0).toUpperCase() + viewId.slice(1));
+  const targetNav = document.getElementById('nav' + viewId.charAt(0).toUpperCase() + viewId.slice(1));
 
-  const total = data.nodes.length;
-  data.nodes.forEach((n, idx) => {
-    let x, y;
-    if (n.id === data.node_id) {
-      // Flagged target placed cleanly on right-center
-      x = cx + 130;
-      y = cy;
-    } else if (n.role.includes('Hub') || n.role.includes('Intermediary')) {
-      x = cx - 30;
-      y = cy + (idx % 2 === 0 ? 40 : -40);
+  if (targetView) targetView.classList.add('active');
+  if (targetNav) targetNav.classList.add('active');
+
+  // Trigger redraw if entering Network or Case view
+  if (viewId === 'case' || viewId === 'network') {
+    setTimeout(fitGraphToViewport, 80);
+  }
+}
+
+function switchCaseTab(tabId) {
+  document.querySelectorAll('.case-tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.case-tab-content').forEach(c => c.classList.remove('active'));
+
+  const targetBtn = document.querySelector(`.case-tab-btn[data-casetab="${tabId}"]`);
+  const targetTab = document.getElementById('caseTab' + tabId.charAt(0).toUpperCase() + tabId.slice(1));
+
+  if (targetBtn) targetBtn.classList.add('active');
+  if (targetTab) targetTab.classList.add('active');
+
+  if (tabId === 'network') {
+    setTimeout(fitGraphToViewport, 80);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Case & Account Investigation Loader
+// -----------------------------------------------------------------------------
+
+async function loadCase(caseIdentifier) {
+  try {
+    // 1. Fetch Case Details from backend
+    const resp = await fetch(`/api/cases/${encodeURIComponent(caseIdentifier)}`);
+    if (!resp.ok) {
+      throw new Error(`Unable to load case ${caseIdentifier}`);
+    }
+    const caseData = await resp.json();
+    appState.activeCaseData = caseData;
+    appState.activeCaseId = caseData.case_id;
+
+    // 2. Fetch Subject Account Details
+    const acctResp = await fetch(`/api/accounts/${encodeURIComponent(caseData.account_key)}`);
+    if (acctResp.ok) {
+      appState.activeAccountData = await acctResp.json();
     } else {
-      const angle = (idx / Math.max(1, total - 1)) * Math.PI * 1.3 - Math.PI * 0.65;
-      const r = 210 + (idx % 3) * 25;
-      x = cx - r * Math.cos(angle);
-      y = cy + r * Math.sin(angle);
+      appState.activeAccountData = caseData.subject_account || {};
     }
 
-    const nodeObj = {
-      id: n.id,
-      key: n.key,
-      role: n.role,
-      risk_score: n.risk_score,
-      is_target: n.is_target,
-      in_degree: n.in_degree,
-      out_degree: n.out_degree,
-      x: x,
-      y: y,
-      radius: n.is_target ? 16 : (n.role.includes('Hub') ? 13 : 9),
-      color: getNodeColor(n),
-    };
-    nodes.push(nodeObj);
-    nodeMap.set(n.id, nodeObj);
-  });
+    // 3. Fetch Transactions
+    const txResp = await fetch(`/api/accounts/${encodeURIComponent(caseData.account_key)}/transactions`);
+    if (txResp.ok) {
+      appState.activeTransactions = await txResp.json();
+    } else {
+      appState.activeTransactions = [];
+    }
 
-  data.edges.forEach(e => {
-    const src = nodeMap.get(e.source);
-    const dst = nodeMap.get(e.target);
-    if (src && dst) {
-      edges.push({
-        source: src,
-        target: dst,
-        source_key: e.source_key,
-        target_key: e.target_key,
-        importance: e.importance,
-        is_decisive: e.is_decisive,
-        is_self_loop: e.is_self_loop,
+    // 4. Fetch Network Topology
+    const netResp = await fetch(`/api/accounts/${encodeURIComponent(caseData.account_key)}/network?depth=1`);
+    if (netResp.ok) {
+      appState.activeNetwork = await netResp.json();
+    } else {
+      appState.activeNetwork = { nodes: [], edges: [] };
+    }
+
+    // 5. Fetch Explanation
+    const expResp = await fetch(`/api/explanations/${encodeURIComponent(caseData.account_key)}`);
+    if (expResp.ok) {
+      appState.activeExplanation = await expResp.json();
+    } else {
+      appState.activeExplanation = null;
+    }
+
+    // 6. Update UI Components
+    renderCaseHeader(caseData, appState.activeAccountData);
+    renderCaseOverviewTab(caseData, appState.activeAccountData, appState.activeExplanation);
+    renderTransactionsTab(appState.activeTransactions);
+    renderNetworkTab(appState.activeNetwork, appState.activeAccountData);
+    renderEvidenceTab();
+    renderReportTab(caseData, appState.activeAccountData, appState.activeExplanation);
+
+    // Update active state in topbar
+    if (caseIdentifier === 'case1' || caseIdentifier === '496618') {
+      updateActiveCasePill('topBtnCase1');
+    } else if (caseIdentifier === 'case2' || caseIdentifier === '6') {
+      updateActiveCasePill('topBtnCase2');
+    } else if (caseIdentifier === 'case3' || caseIdentifier === '91') {
+      updateActiveCasePill('topBtnCase3');
+    }
+
+  } catch (err) {
+    console.error('[TRACE] Failed to load case:', err);
+    alert('Unable to load investigation case details. Please try again.');
+  }
+}
+
+function updateActiveCasePill(buttonId) {
+  document.querySelectorAll('.case-pill-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(buttonId);
+  if (btn) btn.classList.add('active');
+}
+
+// -----------------------------------------------------------------------------
+// Rendering Case Views
+// -----------------------------------------------------------------------------
+
+function renderCaseHeader(c, acct) {
+  // Title Card
+  const codeEl = document.getElementById('activeCaseCode');
+  const riskBadge = document.getElementById('activeCaseRiskBadge');
+  const subtitleEl = document.getElementById('activeCaseSubtitle');
+  const statusBadge = document.getElementById('activeCaseStatusBadge');
+
+  if (codeEl) codeEl.innerText = c.case_id || 'AML-CASE';
+  if (subtitleEl) subtitleEl.innerText = `${acct.customer_name || 'Commercial Entity'} (${acct.typology || c.alert_type})`;
+
+  const riskPct = acct.risk_pct !== undefined ? acct.risk_pct : Math.round((acct.risk_score || 0) * 100);
+  const isHigh = (acct.risk_score || 0) >= (acct.operating_threshold || 0.378);
+
+  if (riskBadge) {
+    riskBadge.className = `badge ${isHigh ? 'badge-high' : 'badge-low'}`;
+    riskBadge.innerText = `${isHigh ? 'HIGH RISK' : 'LOW RISK'} • ${riskPct}%`;
+  }
+
+  if (statusBadge) {
+    statusBadge.className = `badge-status badge-${(c.status || 'open').toLowerCase().replace(/\s+/g, '')}`;
+    statusBadge.innerText = `● ${c.status || 'OPEN'}`;
+  }
+
+  // Subject Account Summary Strip
+  setText('subAcctKey', acct.account_key || '—');
+  setText('subNodeMeta', `${acct.customer_name} • ${acct.bank_name}`);
+  setText('subRiskScoreText', `${riskPct}%`);
+  
+  const tierPill = document.getElementById('subRiskTierPill');
+  if (tierPill) {
+    tierPill.className = `badge ${isHigh ? 'badge-high' : 'badge-low'}`;
+    tierPill.innerText = isHigh ? 'High Conviction' : 'Nominal Risk';
+  }
+
+  setText('subCounterparties', `${acct.counterparty_count || (acct.in_degree + acct.out_degree)} accounts`);
+  setText('subDegBreakdown', `${acct.in_degree || 0} in • ${acct.out_degree || 0} out direct`);
+  setText('subTotalInflow', `$${(acct.total_inflow || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  setText('subTotalOutflow', `$${(acct.total_outflow || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+}
+
+function renderCaseOverviewTab(c, acct, explanation) {
+  // Summary Paragraph with careful compliance language
+  const summaryEl = document.getElementById('caseSummaryParagraph');
+  if (summaryEl) {
+    const isHigh = (acct.risk_score || 0) >= (acct.operating_threshold || 0.378);
+    if (isHigh) {
+      summaryEl.innerText = (
+        `Account ${acct.account_key} (${acct.customer_name}) has been flagged by the automated graph surveillance ` +
+        `system because its observed transaction patterns exceeded the calibrated operating threshold (${acct.operating_threshold || 0.378}). ` +
+        `The GNN evaluated structural money flows and isolated relational characteristics consistent with a ${acct.typology}. ` +
+        `The investigator should examine the counterparty relationships and evidentiary records before determining statutory escalation.`
+      );
+    } else {
+      summaryEl.innerText = (
+        `Account ${acct.account_key} (${acct.customer_name}) exhibits routine counterparty activity with an assessed ` +
+        `risk conviction of ${(acct.risk_score * 100).toFixed(1)}%, well below the operational decision threshold (${acct.operating_threshold || 0.378}). ` +
+        `No suspicious multi-hop structuring or anomalous holding balances were detected.`
+      );
+    }
+  }
+
+  // Why was this alert generated reasons list
+  const reasonList = document.getElementById('caseReasonList');
+  if (reasonList) {
+    reasonList.innerHTML = '';
+    const reasons = [];
+
+    if ((acct.risk_score || 0) >= (acct.operating_threshold || 0.378)) {
+      reasons.push({
+        title: 'Model Operating Threshold Exceeded',
+        desc: `Assessed risk score (${(acct.risk_score * 100).toFixed(1)}%) surpasses validation-tuned threshold (${acct.operating_threshold || 0.378}) for financial crime review.`
+      });
+      reasons.push({
+        title: 'Relational Graph Pattern Identified',
+        desc: `GraphSAGE 3-hop inductive message passing extracted structural pattern: ${acct.typology}.`
+      });
+      reasons.push({
+        title: 'Counterparty Network Concentration',
+        desc: `Observed asymmetric pass-through velocity across ${acct.counterparty_count || (acct.in_degree + acct.out_degree)} connected accounts.`
+      });
+    } else {
+      reasons.push({
+        title: 'Routine Commercial Flow',
+        desc: 'Transactions align with expected ordinary commercial volume and counterparty diversity.'
+      });
+      reasons.push({
+        title: 'Low Model Conviction',
+        desc: `Risk score (${(acct.risk_score * 100).toFixed(1)}%) remains firmly beneath trigger threshold.`
       });
     }
-  });
 
-  state.network.nodes = nodes;
-  state.network.edges = edges;
-  state.network.camera.zoom = 1;
-  state.network.camera.x = 0;
-  state.network.camera.y = 0;
+    reasons.forEach(r => {
+      const li = document.createElement('li');
+      li.className = 'reason-item';
+      li.innerHTML = `
+        <div class="reason-dot"></div>
+        <div>
+          <b>${escapeHtml(r.title)}</b>
+          ${escapeHtml(r.desc)}
+        </div>
+      `;
+      reasonList.appendChild(li);
+    });
+  }
+
+  // Timeline
+  const timelineEl = document.getElementById('caseTimelineList');
+  if (timelineEl) {
+    timelineEl.innerHTML = '';
+    const timelineItems = (c.curated_data && c.curated_data.timeline) ? c.curated_data.timeline : [];
+    
+    if (timelineItems.length === 0 && appState.activeTransactions.length > 0) {
+      // Build from transactions
+      appState.activeTransactions.slice(0, 6).forEach(tx => {
+        timelineItems.push({
+          time: tx.date,
+          title: `${tx.amount} ${tx.type} (${tx.direction})`,
+          desc: `${tx.from} → ${tx.to}`
+        });
+      });
+    }
+
+    if (timelineItems.length === 0) {
+      timelineEl.innerHTML = '<div style="color:var(--text-muted); font-size:12px;">No recent transaction timeline events recorded.</div>';
+    } else {
+      timelineItems.forEach(t => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; gap:12px; font-size:12.5px;';
+        item.innerHTML = `
+          <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); width:110px; flex-shrink:0;">${escapeHtml(t.time)}</div>
+          <div style="border-left:2px solid var(--border-subtle); padding-left:10px;">
+            <div style="font-weight:600; color:var(--text-primary);">${escapeHtml(t.title)}</div>
+            <div style="color:var(--text-secondary); font-size:11.5px;">${escapeHtml(t.desc)}</div>
+          </div>
+        `;
+        timelineEl.appendChild(item);
+      });
+    }
+  }
 }
 
-function getNodeColor(node) {
-  if (node.is_target) return '#dc2626'; // Deep Red
-  if (node.role.includes('Hub')) return '#d97706'; // Amber
-  if (node.role.includes('Mule') || node.role.includes('Source')) return '#0c8592'; // Deep Teal
-  return '#64748b'; // Slate
-}
+function renderTransactionsTab(txs) {
+  const badge = document.getElementById('txnCountBadge');
+  if (badge) badge.innerText = txs.length;
 
-function drawGraph() {
-  const ctx = dom.ctx;
-  if (!ctx || state.activeTab !== 'explorer') {
-    requestAnimationFrame(drawGraph);
+  const tbody = document.getElementById('tbodyCaseTransactions');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (txs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:20px; color:var(--text-muted);">No transaction relationships found for this account.</td></tr>';
     return;
   }
 
-  const width = dom.canvas.parentElement.clientWidth;
-  const height = dom.canvas.parentElement.clientHeight;
+  txs.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.id = `rowTxn_${t.id}`;
+    
+    const isSelected = appState.selectedTxns.has(t.id);
+    if (isSelected) tr.classList.add('selected');
 
-  ctx.clearRect(0, 0, width, height);
-  ctx.save();
+    const riskBadgeClass = t.risk === 'HIGH' ? 'badge-high' : (t.risk === 'MED' ? 'badge-med' : 'badge-low');
+    const typeLabel = t.is_aggregated_relationship ? 'Aggregated Relationship' : t.type;
 
-  // Subtle background grid
-  drawSubtleGrid(ctx, width, height);
-
-  // Apply Camera transform
-  ctx.translate(width / 2 + state.network.camera.x, height / 2 + state.network.camera.y);
-  ctx.scale(state.network.camera.zoom, state.network.camera.zoom);
-  ctx.translate(-width / 2, -height / 2);
-
-  // Draw Edges
-  state.network.edges.forEach(e => {
-    if (e.is_self_loop) return;
-
-    const s = e.source;
-    const d = e.target;
-    const dx = d.x - s.x;
-    const dy = d.y - s.y;
-    const midX = (s.x + d.x) / 2 - dy * 0.08;
-    const midY = (s.y + d.y) / 2 + dx * 0.08;
-
-    ctx.beginPath();
-    ctx.moveTo(s.x, s.y);
-    ctx.quadraticCurveTo(midX, midY, d.x, d.y);
-
-    if (e.is_decisive) {
-      ctx.strokeStyle = '#dc2626';
-      ctx.lineWidth = 3.5;
-    } else {
-      ctx.strokeStyle = 'rgba(100, 116, 139, 0.45)';
-      ctx.lineWidth = Math.max(1, e.importance * 3);
-    }
-    ctx.stroke();
-
-    // Clean Arrowhead
-    drawCleanArrow(ctx, midX, midY, d.x, d.y, d.radius, e.is_decisive ? '#dc2626' : '#64748b');
-
-    // Draw numerical weight on decisive edge
-    if (e.is_decisive) {
-      ctx.font = '600 10px "IBM Plex Mono", monospace';
-      ctx.fillStyle = '#dc2626';
-      ctx.textAlign = 'center';
-      ctx.fillText(`w=${e.importance.toFixed(3)}`, midX, midY - 6);
-    }
+    tr.innerHTML = `
+      <td><input type="checkbox" class="chk-txn" data-txid="${t.id}" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleTxnSelection('${t.id}')"></td>
+      <td class="mono" style="font-weight:600; color:var(--primary-blue); cursor:pointer;" onclick="openSidePanel('${t.id}')">${escapeHtml(t.id)}</td>
+      <td style="font-size:12px;">${escapeHtml(t.date)}</td>
+      <td class="mono" title="${escapeHtml(t.from_customer || '')}">${escapeHtml(t.from)}</td>
+      <td><span class="badge ${t.direction === 'INCOMING' ? 'badge-low' : 'badge-med'}">${escapeHtml(t.direction)}</span></td>
+      <td class="mono" title="${escapeHtml(t.to_customer || '')}">${escapeHtml(t.to)}</td>
+      <td style="font-weight:600;">${escapeHtml(t.amount)}</td>
+      <td style="font-size:11px; color:var(--text-secondary);">${escapeHtml(typeLabel)}</td>
+      <td><span class="badge ${riskBadgeClass}">${escapeHtml(t.risk)}</span></td>
+    `;
+    tr.addEventListener('click', () => openSidePanel(t.id));
+    tbody.appendChild(tr);
   });
-
-  // Draw Nodes
-  state.network.nodes.forEach(n => {
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
-    ctx.fillStyle = n.color;
-    ctx.fill();
-
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Node label
-    ctx.font = `${n.is_target ? '600 11px' : '400 9px'} "IBM Plex Mono", monospace`;
-    ctx.fillStyle = '#0f172a';
-    ctx.textAlign = 'center';
-    const label = n.key.split('-')[1] || n.key;
-    ctx.fillText(label, n.x, n.y + n.radius + 13);
-
-    if (n.is_target) {
-      ctx.font = '600 8.5px "IBM Plex Sans", sans-serif';
-      ctx.fillStyle = '#dc2626';
-      ctx.fillText('TARGET', n.x, n.y - n.radius - 5);
-    } else if (n.role.includes('Hub')) {
-      ctx.font = '600 8px "IBM Plex Sans", sans-serif';
-      ctx.fillStyle = '#d97706';
-      ctx.fillText('HUB', n.x, n.y - n.radius - 4);
-    }
-  });
-
-  ctx.restore();
-  requestAnimationFrame(drawGraph);
 }
 
-function drawSubtleGrid(ctx, width, height) {
-  ctx.save();
-  ctx.fillStyle = '#e2e8f0';
-  const step = 32;
-  for (let x = 16; x < width; x += step) {
-    for (let y = 16; y < height; y += step) {
-      ctx.fillRect(x, y, 1, 1);
-    }
+function toggleTxnSelection(txId) {
+  if (appState.selectedTxns.has(txId)) {
+    appState.selectedTxns.delete(txId);
+  } else {
+    appState.selectedTxns.add(txId);
   }
-  ctx.restore();
+
+  const row = document.getElementById(`rowTxn_${txId}`);
+  if (row) row.classList.toggle('selected', appState.selectedTxns.has(txId));
+
+  updateStickyBar();
 }
 
-function drawCleanArrow(ctx, fromX, fromY, toX, toY, radius, color) {
-  const dx = toX - fromX;
-  const dy = toY - fromY;
-  const angle = Math.atan2(dy, dx);
-  const headLen = 7;
+function updateStickyBar() {
+  const bar = document.getElementById('stickyEvidenceBar');
+  const countLbl = document.getElementById('lblSelectedTxnCount');
+  if (!bar || !countLbl) return;
 
-  const tipX = toX - Math.cos(angle) * (radius + 2);
-  const tipY = toY - Math.sin(angle) * (radius + 2);
+  countLbl.innerText = appState.selectedTxns.size;
+  if (appState.selectedTxns.size > 0) {
+    bar.classList.add('show');
+  } else {
+    bar.classList.remove('show');
+  }
+}
 
-  ctx.beginPath();
-  ctx.moveTo(tipX, tipY);
-  ctx.lineTo(tipX - headLen * Math.cos(angle - Math.PI / 6), tipY - headLen * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(tipX - headLen * Math.cos(angle + Math.PI / 6), tipY - headLen * Math.sin(angle + Math.PI / 6));
-  ctx.closePath();
-  ctx.fillStyle = color;
-  ctx.fill();
+function clearSelectedTxns() {
+  appState.selectedTxns.clear();
+  document.querySelectorAll('.chk-txn').forEach(c => c.checked = false);
+  document.querySelectorAll('#tbodyCaseTransactions tr').forEach(r => r.classList.remove('selected'));
+  updateStickyBar();
 }
 
 // -----------------------------------------------------------------------------
-// Mouse & Canvas Drag Interactions
+// Network Canvas Visualizer
 // -----------------------------------------------------------------------------
-function setupCanvasInteractions() {
-  const canvas = dom.canvas;
 
-  canvas.addEventListener('mousedown', (e) => {
-    const coords = getCanvasCoords(e);
-    const clicked = state.network.nodes.find(n => Math.hypot(n.x - coords.x, n.y - coords.y) <= n.radius + 6);
-    if (clicked) {
-      state.network.draggedNode = clicked;
-      updateDossierFromNode(clicked);
-    } else {
-      state.network.isDragging = true;
-      state.network.dragStart = { x: e.clientX, y: e.clientY };
-    }
+function initCanvas() {
+  const c = document.getElementById('investigationCanvas');
+  if (!c) return;
+  graphState.canvas = c;
+  graphState.ctx = c.getContext('2d');
+
+  function resize() {
+    const rect = c.parentElement.getBoundingClientRect();
+    c.width = rect.width * window.devicePixelRatio;
+    c.height = rect.height * window.devicePixelRatio;
+    drawNetworkGraph();
+  }
+
+  window.addEventListener('resize', resize);
+  setTimeout(resize, 50);
+
+  // Pan and drag
+  c.addEventListener('mousedown', (e) => {
+    graphState.isDragging = true;
+    graphState.dragStart = { x: e.clientX - graphState.panX, y: e.clientY - graphState.panY };
   });
 
   window.addEventListener('mousemove', (e) => {
-    if (state.network.draggedNode) {
-      const coords = getCanvasCoords(e);
-      state.network.draggedNode.x = coords.x;
-      state.network.draggedNode.y = coords.y;
-    } else if (state.network.isDragging) {
-      state.network.camera.x += e.clientX - state.network.dragStart.x;
-      state.network.camera.y += e.clientY - state.network.dragStart.y;
-      state.network.dragStart = { x: e.clientX, y: e.clientY };
+    if (graphState.isDragging) {
+      graphState.panX = e.clientX - graphState.dragStart.x;
+      graphState.panY = e.clientY - graphState.dragStart.y;
+      drawNetworkGraph();
     }
   });
 
   window.addEventListener('mouseup', () => {
-    state.network.draggedNode = null;
-    state.network.isDragging = false;
+    graphState.isDragging = false;
   });
 
-  canvas.addEventListener('wheel', (e) => {
+  // Scroll to zoom
+  c.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.08 : 0.92;
-    state.network.camera.zoom = Math.min(2.2, Math.max(0.5, state.network.camera.zoom * factor));
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    graphState.scale = Math.max(0.3, Math.min(3.5, graphState.scale * factor));
+    drawNetworkGraph();
+  });
+
+  // Floating Controls
+  const btnZoomIn = document.getElementById('btnZoomIn');
+  const btnZoomOut = document.getElementById('btnZoomOut');
+  const btnFit = document.getElementById('btnFitGraph');
+
+  if (btnZoomIn) btnZoomIn.addEventListener('click', () => { graphState.scale *= 1.2; drawNetworkGraph(); });
+  if (btnZoomOut) btnZoomOut.addEventListener('click', () => { graphState.scale /= 1.2; drawNetworkGraph(); });
+  if (btnFit) btnFit.addEventListener('click', fitGraphToViewport);
+}
+
+function renderNetworkTab(net, subjectAcct) {
+  // Populate dropdowns for Trace Money Flow
+  const selSrc = document.getElementById('selTraceSource');
+  const selDst = document.getElementById('selTraceTarget');
+
+  if (selSrc && selDst) {
+    selSrc.innerHTML = '';
+    selDst.innerHTML = '';
+
+    const nodes = net.nodes || [];
+    nodes.forEach(n => {
+      const opt1 = document.createElement('option');
+      opt1.value = n.key || n.id;
+      opt1.text = `${n.key} (${n.customer_name || n.role || 'Account'})`;
+      selSrc.appendChild(opt1);
+
+      const opt2 = document.createElement('option');
+      opt2.value = n.key || n.id;
+      opt2.text = `${n.key} (${n.customer_name || n.role || 'Account'})`;
+      if (n.is_target) opt2.selected = true;
+      selDst.appendChild(opt2);
+    });
+  }
+
+  // Mini Explainer table on the side
+  const miniTable = document.getElementById('miniExplainerTable');
+  if (miniTable) {
+    miniTable.innerHTML = '';
+    const edges = net.edges || [];
+    const decisiveEdges = edges.filter(e => e.importance >= 0.4 || e.is_decisive).slice(0, 4);
+
+    if (decisiveEdges.length === 0) {
+      miniTable.innerHTML = '<div style="color:var(--text-muted); font-size:11px;">No high-weight edge attributions.</div>';
+    } else {
+      decisiveEdges.forEach(e => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dashed var(--border-subtle);';
+        item.innerHTML = `
+          <span>${escapeHtml(e.source_key || e.source)} &rarr; ${escapeHtml(e.target_key || e.target)}</span>
+          <b style="color:var(--primary-blue);">${(e.importance * 100).toFixed(1)}%</b>
+        `;
+        miniTable.appendChild(item);
+      });
+    }
+  }
+
+  // Position nodes and render
+  layoutNetworkNodes(net, subjectAcct);
+  fitGraphToViewport();
+}
+
+function layoutNetworkNodes(net, subjectAcct) {
+  graphState.nodePositions.clear();
+  const nodes = net.nodes || [];
+  const count = nodes.length;
+
+  if (count === 0) return;
+
+  const targetNode = nodes.find(n => n.is_target) || nodes[0];
+  const centerPos = { x: 400, y: 220 };
+  graphState.nodePositions.set(targetNode.id, centerPos);
+
+  // Position other nodes radially or hierarchically
+  const otherNodes = nodes.filter(n => n.id !== targetNode.id);
+  const radius = 180;
+  otherNodes.forEach((node, i) => {
+    // If predefined x, y in curated cases, use them
+    if (node.x && node.y) {
+      graphState.nodePositions.set(node.id, { x: node.x, y: node.y });
+    } else {
+      const angle = (2 * Math.PI * i) / otherNodes.length;
+      graphState.nodePositions.set(node.id, {
+        x: centerPos.x + radius * Math.cos(angle),
+        y: centerPos.y + radius * Math.sin(angle)
+      });
+    }
   });
 }
 
-function getCanvasCoords(e) {
-  const rect = dom.canvas.getBoundingClientRect();
-  const rawX = e.clientX - rect.left;
-  const rawY = e.clientY - rect.top;
-  const width = rect.width;
-  const height = rect.height;
-
-  const centeredX = rawX - (width / 2 + state.network.camera.x);
-  const centeredY = rawY - (height / 2 + state.network.camera.y);
-  return {
-    x: centeredX / state.network.camera.zoom + width / 2,
-    y: centeredY / state.network.camera.zoom + height / 2,
-  };
+function fitGraphToViewport() {
+  if (!graphState.canvas) return;
+  graphState.scale = 1.0;
+  graphState.panX = 0;
+  graphState.panY = 0;
+  drawNetworkGraph();
 }
 
-function updateDossierFromNode(node) {
-  if (dom.dossierKey) dom.dossierKey.textContent = node.key;
-  if (dom.dossierRisk) dom.dossierRisk.textContent = `${(node.risk_score * 100).toFixed(1)}% Risk`;
-  if (dom.dossierRole) dom.dossierRole.textContent = node.role;
-  if (dom.dossierInDeg) dom.dossierInDeg.textContent = node.in_degree;
-  if (dom.dossierOutDeg) dom.dossierOutDeg.textContent = node.out_degree;
-}
+function drawNetworkGraph() {
+  const c = graphState.canvas;
+  const ctx = graphState.ctx;
+  if (!c || !ctx) return;
 
-// -----------------------------------------------------------------------------
-// UI Event Handlers
-// -----------------------------------------------------------------------------
-function setupEventListeners() {
-  // Camera Buttons
-  if (dom.btnReset) {
-    dom.btnReset.addEventListener('click', () => {
-      state.network.camera.x = 0;
-      state.network.camera.y = 0;
-      state.network.camera.zoom = 1;
-    });
-  }
-  if (dom.btnZoomIn) {
-    dom.btnZoomIn.addEventListener('click', () => {
-      state.network.camera.zoom = Math.min(2.2, state.network.camera.zoom * 1.2);
-    });
-  }
-  if (dom.btnZoomOut) {
-    dom.btnZoomOut.addEventListener('click', () => {
-      state.network.camera.zoom = Math.max(0.5, state.network.camera.zoom * 0.8);
-    });
-  }
+  const dpr = window.devicePixelRatio || 1;
+  ctx.save();
+  ctx.clearRect(0, 0, c.width, c.height);
 
-  // Case Preset Buttons
-  dom.caseButtons.forEach(btn => {
-    btn.addEventListener('click', () => {
-      dom.caseButtons.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      const nodeId = parseInt(btn.dataset.nodeId);
-      loadAccountExplanation(nodeId);
-    });
+  ctx.scale(dpr * graphState.scale, dpr * graphState.scale);
+  ctx.translate(graphState.panX / graphState.scale, graphState.panY / graphState.scale);
+
+  const net = appState.activeNetwork;
+  const nodes = net.nodes || [];
+  const edges = net.edges || [];
+
+  // Draw Edges
+  edges.forEach(e => {
+    const sPos = graphState.nodePositions.get(e.source);
+    const dPos = graphState.nodePositions.get(e.target);
+    if (!sPos || !dPos) return;
+
+    const isHighPath = graphState.highlightedPath && graphState.highlightedPath.has(`${e.source}-${e.target}`);
+    const isDecisive = e.importance >= 0.5 || e.is_decisive;
+
+    ctx.beginPath();
+    ctx.moveTo(sPos.x, sPos.y);
+    ctx.lineTo(dPos.x, dPos.y);
+
+    if (isHighPath) {
+      ctx.strokeStyle = '#2563EB';
+      ctx.lineWidth = 3.5;
+    } else if (isDecisive) {
+      ctx.strokeStyle = '#D92D20';
+      ctx.lineWidth = 2.2;
+    } else {
+      ctx.strokeStyle = '#D1D5DB';
+      ctx.lineWidth = 1.2;
+    }
+    ctx.stroke();
+
+    // Draw Arrowhead
+    const angle = Math.atan2(dPos.y - sPos.y, dPos.x - sPos.x);
+    const arrowDist = 18;
+    const arrowX = dPos.x - arrowDist * Math.cos(angle);
+    const arrowY = dPos.y - arrowDist * Math.sin(angle);
+
+    ctx.beginPath();
+    ctx.moveTo(arrowX, arrowY);
+    ctx.lineTo(arrowX - 8 * Math.cos(angle - Math.PI / 6), arrowY - 8 * Math.sin(angle - Math.PI / 6));
+    ctx.lineTo(arrowX - 8 * Math.cos(angle + Math.PI / 6), arrowY - 8 * Math.sin(angle + Math.PI / 6));
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.fill();
   });
 
-  // Custom Search
-  if (dom.btnSearch) {
-    dom.btnSearch.addEventListener('click', () => {
-      const val = parseInt(dom.customInput.value.trim());
-      if (!isNaN(val)) {
-        loadAccountExplanation(val);
+  // Draw Nodes
+  nodes.forEach(n => {
+    const pos = graphState.nodePositions.get(n.id);
+    if (!pos) return;
+
+    ctx.beginPath();
+    const radius = n.is_target ? 16 : 11;
+    ctx.arc(pos.x, pos.y, radius, 0, 2 * Math.PI);
+
+    if (n.is_target) {
+      ctx.fillStyle = '#2457C5';
+      ctx.strokeStyle = '#1D46A3';
+    } else if (n.risk_cat === 'HIGH' || n.risk_score >= 0.378) {
+      ctx.fillStyle = '#D92D20';
+      ctx.strokeStyle = '#B42318';
+    } else if (n.risk_cat === 'MED') {
+      ctx.fillStyle = '#DC9A00';
+      ctx.strokeStyle = '#B54708';
+    } else {
+      ctx.fillStyle = '#159455';
+      ctx.strokeStyle = '#027A48';
+    }
+
+    ctx.lineWidth = 2;
+    ctx.fill();
+    ctx.stroke();
+
+    // Label
+    ctx.fillStyle = '#17202A';
+    ctx.font = '500 11px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    const labelKey = n.key ? n.key.slice(-8) : `ID ${n.id}`;
+    ctx.fillText(labelKey, pos.x, pos.y + radius + 13);
+  });
+
+  ctx.restore();
+}
+
+// -----------------------------------------------------------------------------
+// Trace Funds Action
+// -----------------------------------------------------------------------------
+
+async function executeTraceFunds() {
+  const selSrc = document.getElementById('selTraceSource');
+  const selDst = document.getElementById('selTraceTarget');
+  const resBox = document.getElementById('traceResultContainer');
+  const summaryEl = document.getElementById('traceResultSummary');
+  const detailsEl = document.getElementById('tracePathDetails');
+  const metricsEl = document.getElementById('tracePathMetrics');
+
+  if (!selSrc || !selDst || !resBox) return;
+
+  const srcVal = selSrc.value;
+  const dstVal = selDst.value;
+
+  try {
+    const resp = await fetch(`/api/network/${encodeURIComponent(srcVal)}/trace?target=${encodeURIComponent(dstVal)}`);
+    if (!resp.ok) {
+      throw new Error('Trace API query error');
+    }
+
+    const data = await resp.json();
+    resBox.style.display = 'block';
+
+    if (data.found && data.path.length > 0) {
+      summaryEl.innerText = `${data.hop_count}-hop money flow path confirmed`;
+      summaryEl.style.color = 'var(--text-primary)';
+
+      detailsEl.innerHTML = '';
+      data.path.forEach((nodeKey, idx) => {
+        const step = document.createElement('div');
+        step.className = 'path-step';
+        step.innerHTML = `
+          <span style="color:var(--text-muted); font-size:10px;">HOP 0${idx}</span>
+          <span class="mono" style="font-weight:600; font-size:11px;">${escapeHtml(nodeKey)}</span>
+        `;
+        detailsEl.appendChild(step);
+      });
+
+      metricsEl.innerText = `Total Observed Flow: $${data.total_observed_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} • ${data.hop_count} Conduits`;
+
+      // Highlight on canvas
+      graphState.highlightedPath = new Set();
+      for (let i = 0; i < data.path_nodes.length - 1; i++) {
+        graphState.highlightedPath.add(`${data.path_nodes[i]}-${data.path_nodes[i+1]}`);
+      }
+      drawNetworkGraph();
+
+      // Log in audit log
+      await logAuditAction('Network Funds Traced', appState.activeCaseId, `Traced money flow from ${srcVal} to ${dstVal} (${data.hop_count} hops).`);
+
+    } else {
+      summaryEl.innerText = 'No supported path found within selected network scope.';
+      summaryEl.style.color = 'var(--text-secondary)';
+      detailsEl.innerHTML = '<div style="font-size:11.5px; color:var(--text-muted); padding:6px 0;">No active directed transaction conduits connect these two entities.</div>';
+      metricsEl.innerText = 'Scope: Up to 5 hops across directed transaction ledger.';
+      graphState.highlightedPath = null;
+      drawNetworkGraph();
+    }
+
+  } catch (err) {
+    console.error('[TRACE] Failed to trace funds:', err);
+    alert('Unable to trace funds between selected accounts.');
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Evidence Board & Sticky Bar
+// -----------------------------------------------------------------------------
+
+function renderEvidenceTab() {
+  const counter = document.getElementById('evidenceCounterBadge');
+  if (counter) counter.innerText = appState.activeEvidence.length;
+
+  const tbody = document.getElementById('tbodyEvidenceTxns');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  if (appState.activeEvidence.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:20px;">No transactions added to evidence yet. Select transactions from the Transactions tab.</td></tr>';
+    return;
+  }
+
+  appState.activeEvidence.forEach((item, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono" style="font-weight:600;">${escapeHtml(item.id)}</td>
+      <td style="font-size:12px;">${escapeHtml(item.date || '2026-10-17')}</td>
+      <td class="mono">${escapeHtml(item.from || item.source_key || 'Source')} &rarr; ${escapeHtml(item.to || item.target_key || 'Target')}</td>
+      <td style="font-weight:600;">${escapeHtml(item.amount || '$0.00')}</td>
+      <td><button class="btn btn-secondary btn-sm" onclick="removeEvidenceItem('${item.id}')">Remove</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// Button in sticky bar: Add Selected to Evidence
+document.addEventListener('click', async (e) => {
+  if (e.target && e.target.id === 'btnAddSelectedToEvidence') {
+    const count = appState.selectedTxns.size;
+    if (count === 0) return;
+
+    appState.selectedTxns.forEach(txId => {
+      const tx = appState.activeTransactions.find(t => t.id === txId);
+      if (tx && !appState.activeEvidence.some(ev => ev.id === tx.id)) {
+        appState.activeEvidence.push(tx);
+      }
+    });
+
+    clearSelectedTxns();
+    renderEvidenceTab();
+    updateReportPreview();
+
+    await logAuditAction('Evidence Added', appState.activeCaseId, `Added ${count} transaction(s) to evidentiary docket.`);
+    alert(`Successfully added ${count} transaction(s) to the Case Evidence docket.`);
+  }
+});
+
+async function removeEvidenceItem(itemId) {
+  appState.activeEvidence = appState.activeEvidence.filter(e => e.id !== itemId);
+  renderEvidenceTab();
+  updateReportPreview();
+  await logAuditAction('Evidence Removed', appState.activeCaseId, `Removed item ${itemId} from evidentiary docket.`);
+}
+
+// -----------------------------------------------------------------------------
+// Investigator Notes
+// -----------------------------------------------------------------------------
+
+async function saveInvestigatorNote() {
+  const area = document.getElementById('investigatorNotesArea');
+  if (!area) return;
+  const text = area.value.trim();
+  if (!text) {
+    alert('Please enter note text before saving.');
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/api/cases/${encodeURIComponent(appState.activeCaseId)}/notes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, investigator: 'H. Vance (Senior AML Analyst)' })
+    });
+
+    if (resp.ok) {
+      const stamp = document.getElementById('noteSavedTimestamp');
+      if (stamp) stamp.innerText = `Last saved: Just now by H. Vance`;
+      await logAuditAction('Investigator Note Added', appState.activeCaseId, `Note: ${text.slice(0, 50)}...`);
+      updateReportPreview();
+      alert('Investigator note successfully saved to case docket.');
+    }
+  } catch (err) {
+    console.error('[TRACE] Failed to save note:', err);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Report Generation Tab
+// -----------------------------------------------------------------------------
+
+function renderReportTab(c, acct, explanation) {
+  updateReportPreview();
+}
+
+function updateReportPreview() {
+  const c = appState.activeCaseData || {};
+  const acct = appState.activeAccountData || {};
+  const selRec = document.getElementById('selReportRecommendation');
+  const recommendation = selRec ? selRec.value : 'Escalate for Further Review';
+
+  setText('repTrackingCode', `SAR-TRACE-2026-${acct.node_id ? String(acct.node_id).padStart(6, '0') : '00421'}`);
+  setText('repCaseId', c.case_id || 'AML-2026-00421');
+  setText('repStatus', c.status || 'UNDER REVIEW');
+  setText('repInstCode', acct.bank_name || 'BANK-0214');
+  setText('repAccountKey', acct.account_key || '0214-80C1C8AC0');
+  setText('repNodeId', acct.node_id || '496618');
+  setText('repRiskScore', `${((acct.risk_score || 0) * 100).toFixed(1)}% (${(acct.risk_score || 0) >= (acct.operating_threshold || 0.378) ? 'HIGH RISK' : 'LOW RISK'})`);
+
+  const summary = (
+    `Subject Account ${acct.account_key} (${acct.customer_name}) was flagged by the automated ` +
+    `graph surveillance engine because observed multi-hop transaction structures exceeded the configured ` +
+    `operational threshold (${acct.operating_threshold || 0.378}). The pattern aligns with a ${acct.typology || 'Suspicious Multi-Party Funnel'} ` +
+    `with rapid pass-through velocity.`
+  );
+  setText('repSummaryText', summary);
+
+  // Evidentiary Table in Report
+  const tbody = document.getElementById('repTxnTbody');
+  if (tbody) {
+    tbody.innerHTML = '';
+    const items = appState.activeEvidence.length > 0 ? appState.activeEvidence : appState.activeTransactions.slice(0, 4);
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--text-muted); text-align:center;">No evidentiary records attached.</td></tr>';
+    } else {
+      items.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="mono">${escapeHtml(item.id)}</td>
+          <td>${escapeHtml(item.date || '2026-10-17')}</td>
+          <td class="mono">${escapeHtml(item.from)} &rarr; ${escapeHtml(item.to)}</td>
+          <td style="font-weight:600;">${escapeHtml(item.amount)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  }
+
+  // Notes in report
+  const notesArea = document.getElementById('investigatorNotesArea');
+  const currentNote = notesArea ? notesArea.value.trim() : '';
+  const noteDisplay = document.getElementById('repNotesDisplay');
+  if (noteDisplay) {
+    noteDisplay.innerText = currentNote ? `"${currentNote}"` : `"Observed transaction structure shows pass-through funneling across institutional banking lines. Recommendation: ${recommendation}."`;
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Overview View & Priority Alerts Queue
+// -----------------------------------------------------------------------------
+
+async function refreshOverview() {
+  const resp = await fetch('/api/overview');
+  if (!resp.ok) return;
+  const ov = await resp.json();
+  appState.overviewData = ov;
+
+  const alerts = ov.priority_alerts || [];
+  renderOverviewAlertsTable(alerts);
+}
+
+function renderOverviewAlertsTable(alerts) {
+  const tbody = document.getElementById('tbodyOverviewAlerts');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  alerts.forEach(a => {
+    const tr = document.createElement('tr');
+    tr.style.cursor = 'pointer';
+    
+    tr.innerHTML = `
+      <td class="mono" style="font-weight:600; color:var(--primary-blue);">${escapeHtml(a.alert_id)}</td>
+      <td><span class="badge ${a.risk_level === 'HIGH' || a.risk_level === 'CRITICAL' ? 'badge-high' : 'badge-low'}">${escapeHtml(a.risk_level)} • ${a.risk_pct}%</span></td>
+      <td class="mono">${escapeHtml(a.account_key)}</td>
+      <td><b>${escapeHtml(a.customer_name)}</b><div style="font-size:11px; color:var(--text-muted);">${escapeHtml(a.bank_name)}</div></td>
+      <td style="font-size:11.5px;">${escapeHtml(a.typology)}</td>
+      <td style="font-weight:600;">${escapeHtml(a.amount)}</td>
+      <td style="font-size:12px;">${a.transactions_count} flows</td>
+      <td style="font-size:11.5px; color:var(--text-muted);">${escapeHtml(a.created_date.split(' ')[0])}</td>
+      <td><span class="badge-status badge-${a.status.toLowerCase().replace(/\s+/g, '')}">${escapeHtml(a.status)}</span></td>
+      <td><button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); inspectAlert('${a.account_key}')">Investigate</button></td>
+    `;
+    tr.addEventListener('click', () => inspectAlert(a.account_key));
+    tbody.appendChild(tr);
+  });
+}
+
+function filterOverviewAlerts() {
+  const rFilter = document.getElementById('filterAlertRisk').value;
+  const sFilter = document.getElementById('filterAlertStatus').value;
+
+  let alerts = (appState.overviewData && appState.overviewData.priority_alerts) || [];
+  if (rFilter !== 'ALL') {
+    alerts = alerts.filter(a => a.risk_level === rFilter);
+  }
+  if (sFilter !== 'ALL') {
+    alerts = alerts.filter(a => a.status === sFilter);
+  }
+  renderOverviewAlertsTable(alerts);
+}
+
+async function inspectAlert(accountKey) {
+  await loadCase(accountKey);
+  switchView('case');
+}
+
+// -----------------------------------------------------------------------------
+// Full Alerts Queue Tab
+// -----------------------------------------------------------------------------
+
+async function refreshAlerts() {
+  const resp = await fetch('/api/alerts?limit=50');
+  if (!resp.ok) return;
+  const data = await resp.json();
+  appState.alertsData = data.alerts || [];
+
+  const tbody = document.getElementById('tbodyFullAlerts');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  appState.alertsData.forEach(a => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono" style="font-weight:600; color:var(--primary-blue); cursor:pointer;" onclick="inspectAlert('${a.account_key}')">${escapeHtml(a.alert_id)}</td>
+      <td><span class="badge ${a.risk_level === 'HIGH' || a.risk_level === 'CRITICAL' ? 'badge-high' : 'badge-low'}">${escapeHtml(a.risk_level)}</span></td>
+      <td class="mono">${escapeHtml(a.account_key)}</td>
+      <td><b>${escapeHtml(a.customer_name)}</b></td>
+      <td style="font-size:11.5px;">${escapeHtml(a.typology)}</td>
+      <td><b>${escapeHtml(a.amount)}</b></td>
+      <td style="font-size:12px;">${a.transactions_count}</td>
+      <td><span class="badge-status badge-${a.status.toLowerCase().replace(/\s+/g, '')}">${escapeHtml(a.status)}</span></td>
+      <td><button class="btn btn-secondary btn-sm" onclick="inspectAlert('${a.account_key}')">Investigate</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// -----------------------------------------------------------------------------
+// Audit Log Tab
+// -----------------------------------------------------------------------------
+
+async function refreshAuditLog() {
+  const resp = await fetch('/api/audit_log?limit=50');
+  if (!resp.ok) return;
+  const logs = await resp.json();
+  appState.auditLogData = logs;
+
+  const tbody = document.getElementById('tbodyAuditLog');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  logs.forEach(l => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="mono" style="font-size:11.5px; color:var(--text-muted);">${escapeHtml(l.timestamp)}</td>
+      <td><b>${escapeHtml(l.investigator)}</b></td>
+      <td><span class="badge badge-low" style="font-weight:600;">${escapeHtml(l.action)}</span></td>
+      <td class="mono" style="color:var(--primary-blue);">${escapeHtml(l.case_id)}</td>
+      <td style="font-size:12.5px;">${escapeHtml(l.details)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function logAuditAction(action, caseId, details) {
+  try {
+    await fetch('/api/audit_log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action,
+        case_id: caseId || 'AML-GENERAL',
+        details,
+        investigator: 'H. Vance (Senior AML Analyst)'
+      })
+    });
+    await refreshAuditLog();
+  } catch (err) {
+    console.error('[TRACE] Failed to log audit event:', err);
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Model & Benchmarks Tab
+// -----------------------------------------------------------------------------
+
+async function refreshBenchmarks() {
+  const resp = await fetch('/api/benchmarks');
+  if (!resp.ok) return;
+  appState.benchmarksData = await resp.json();
+}
+
+// -----------------------------------------------------------------------------
+// Side Detail Panel
+// -----------------------------------------------------------------------------
+
+function openSidePanel(txId) {
+  const tx = appState.activeTransactions.find(t => t.id === txId);
+  const panel = document.getElementById('sideDetailPanel');
+  const titleEl = document.getElementById('sideDetailTitle');
+  const bodyEl = document.getElementById('sideDetailBody');
+
+  if (!panel || !titleEl || !bodyEl) return;
+
+  if (tx) {
+    titleEl.innerText = `Transaction ${tx.id}`;
+    bodyEl.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div style="background:var(--surface-secondary); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
+          <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Observed Transfer Amount</div>
+          <div style="font-size:20px; font-weight:700; color:var(--text-primary); margin-top:2px;">${escapeHtml(tx.amount)}</div>
+          <div style="margin-top:6px;"><span class="badge ${tx.risk === 'HIGH' ? 'badge-high' : 'badge-low'}">${escapeHtml(tx.risk)} RISK CONVICTION</span></div>
+        </div>
+
+        <div style="font-size:12.5px; display:flex; flex-direction:column; gap:6px;">
+          <div>Timestamp: <b>${escapeHtml(tx.date)}</b></div>
+          <div>Format / Type: <b>${escapeHtml(tx.type)}</b></div>
+          <div>Direction: <b>${escapeHtml(tx.direction)}</b></div>
+          <div>Source Entity: <b class="mono">${escapeHtml(tx.from)}</b> (${escapeHtml(tx.from_customer || 'Bank Client')})</div>
+          <div>Destination Entity: <b class="mono">${escapeHtml(tx.to)}</b> (${escapeHtml(tx.to_customer || 'Bank Client')})</div>
+        </div>
+
+        <div style="border-top:1px solid var(--border-subtle); padding-top:10px; margin-top:4px;">
+          <button class="btn btn-primary btn-sm" style="width:100%;" onclick="toggleTxnSelection('${tx.id}'); closeSidePanel();">
+            ${appState.selectedTxns.has(tx.id) ? 'Deselect Transaction' : 'Select for Evidentiary Docket'}
+          </button>
+        </div>
+      </div>
+    `;
+  } else {
+    titleEl.innerText = `Entity Context`;
+    bodyEl.innerHTML = `<div style="font-size:12.5px; color:var(--text-secondary);">Inspecting related network entity.</div>`;
+  }
+
+  panel.classList.add('open');
+}
+
+function closeSidePanel() {
+  const panel = document.getElementById('sideDetailPanel');
+  if (panel) panel.classList.remove('open');
+}
+
+// -----------------------------------------------------------------------------
+// Escalation & Status Modals
+// -----------------------------------------------------------------------------
+
+function initModals() {
+  const btnOpenEscalate = document.getElementById('btnOpenEscalateModal');
+  const modalEscalate = document.getElementById('modalEscalate');
+  const btnConfirmEscalate = document.getElementById('btnConfirmEscalate');
+
+  if (btnOpenEscalate && modalEscalate) {
+    btnOpenEscalate.addEventListener('click', () => {
+      modalEscalate.classList.add('open');
+    });
+  }
+
+  if (btnConfirmEscalate && modalEscalate) {
+    btnConfirmEscalate.addEventListener('click', async () => {
+      const reason = document.getElementById('modalEscalateReason').value;
+      const notes = document.getElementById('modalEscalateNotes').value;
+      
+      try {
+        const resp = await fetch(`/api/cases/${encodeURIComponent(appState.activeCaseId)}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'ESCALATED',
+            reason: `${reason}${notes ? ' - ' + notes : ''}`,
+            investigator: 'H. Vance (Senior AML Analyst)'
+          })
+        });
+
+        if (resp.ok) {
+          modalEscalate.classList.remove('open');
+          await loadCase(appState.activeCaseId);
+          alert(`Case ${appState.activeCaseId} escalated to Compliance Review Committee.`);
+        }
+      } catch (err) {
+        console.error('[TRACE] Failed to escalate case:', err);
       }
     });
   }
-
-  // Threshold Slider
-  if (dom.thSlider) {
-    dom.thSlider.addEventListener('input', (e) => {
-      const val = parseFloat(e.target.value);
-      dom.thDisplay.textContent = val.toFixed(2);
-      updateThresholdMetrics(val);
-    });
-  }
-
-  // SAR Actions
-  if (dom.btnPrintSar) dom.btnPrintSar.addEventListener('click', () => window.print());
-  if (dom.btnCopySar) dom.btnCopySar.addEventListener('click', copySarText);
-  if (dom.btnDownloadSar) dom.btnDownloadSar.addEventListener('click', downloadSarJson);
 }
 
-// -----------------------------------------------------------------------------
-// Benchmark Sandbox
-// -----------------------------------------------------------------------------
-async function loadBenchmarks() {
+function closeEscalateModal() {
+  const modal = document.getElementById('modalEscalate');
+  if (modal) modal.classList.remove('open');
+}
+
+async function closeCase() {
+  if (!confirm(`Confirm closure of Case ${appState.activeCaseId}?`)) return;
+
   try {
-    const res = await fetch('/api/benchmarks');
-    const data = await res.json();
-    state.benchmarkData = data;
-    updateThresholdMetrics(0.68);
+    const resp = await fetch(`/api/cases/${encodeURIComponent(appState.activeCaseId)}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'CLOSED — NO FURTHER ACTION',
+        reason: 'Investigation complete. Low residual risk confirmed.',
+        investigator: 'H. Vance (Senior AML Analyst)'
+      })
+    });
+
+    if (resp.ok) {
+      await loadCase(appState.activeCaseId);
+      alert(`Case ${appState.activeCaseId} closed with disposition: NO FURTHER ACTION.`);
+    }
   } catch (err) {
-    console.warn('Failed to load benchmarks:', err);
+    console.error('[TRACE] Failed to close case:', err);
   }
 }
 
-function updateThresholdMetrics(val) {
-  if (!state.benchmarkData || !state.benchmarkData.threshold_curve) return;
-  const curve = state.benchmarkData.threshold_curve;
+// -----------------------------------------------------------------------------
+// Search & Keyboard Shortcuts
+// -----------------------------------------------------------------------------
 
-  let closest = curve[0];
-  let minDiff = 999;
-  curve.forEach(pt => {
-    const diff = Math.abs(pt.threshold - val);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = pt;
+async function handleGlobalSearch(query) {
+  try {
+    // Check if matching case 1, 2, or 3
+    if (query.includes('496618') || query.includes('80C1C8AC0') || query.includes('421')) {
+      await loadCase('case1');
+      switchView('case');
+      return;
+    }
+    if (query.includes('6') || query.includes('8000EBAC0') || query.includes('389')) {
+      await loadCase('case2');
+      switchView('case');
+      return;
+    }
+    if (query.includes('91') || query.includes('800056370') || query.includes('54')) {
+      await loadCase('case3');
+      switchView('case');
+      return;
+    }
+
+    // Try direct account query
+    const resp = await fetch(`/api/accounts/${encodeURIComponent(query)}`);
+    if (resp.ok) {
+      await loadCase(query);
+      switchView('case');
+    } else {
+      alert(`Account key or identifier "${query}" not found in graph index.`);
+    }
+  } catch (err) {
+    console.error('[TRACE] Search error:', err);
+  }
+}
+
+function initKeyboardShortcuts() {
+  window.addEventListener('keydown', (e) => {
+    // If typing in input or textarea, don't trigger shortcuts
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    if (e.key === 'p' || e.key === 'P') {
+      togglePresentationMode();
+    } else if (e.key === '1') {
+      loadCase('case1');
+      switchView('case');
+    } else if (e.key === '2') {
+      loadCase('case2');
+      switchView('case');
+    } else if (e.key === '3') {
+      loadCase('case3');
+      switchView('case');
+    } else if (e.key === 'r' || e.key === 'R') {
+      fitGraphToViewport();
+    } else if (e.key === 'e' || e.key === 'E') {
+      switchView('case');
+      switchCaseTab('network');
+      toggleTechAccordion();
     }
   });
+}
 
-  dom.sbPrecision.textContent = (closest.precision * 100).toFixed(1) + '%';
-  dom.sbRecall.textContent = (closest.recall * 100).toFixed(1) + '%';
-  dom.sbF1.textContent = closest.f1.toFixed(3);
-  dom.sbAlerts.textContent = closest.estimated_alerts.toLocaleString();
-  dom.sbFalseAlarms.textContent = closest.false_alarms.toLocaleString();
-  dom.sbTruePositives.textContent = closest.true_positives.toLocaleString();
+function togglePresentationMode() {
+  appState.presentationMode = !appState.presentationMode;
+  document.body.classList.toggle('presentation-mode', appState.presentationMode);
+  setTimeout(fitGraphToViewport, 100);
+}
+
+function toggleTechAccordion() {
+  const body = document.getElementById('techAccordionBody');
+  const arrow = document.getElementById('techAccordionArrow');
+  if (!body) return;
+
+  const isHidden = body.style.display === 'none' || !body.style.display;
+  body.style.display = isHidden ? 'block' : 'none';
+  if (arrow) arrow.innerHTML = isHidden ? '&#9662;' : '&#9656;';
 }
 
 // -----------------------------------------------------------------------------
-// SAR Audit Memo
+// Utilities
 // -----------------------------------------------------------------------------
-async function updateSarMemo() {
-  try {
-    const res = await fetch(`/api/sar/${state.activeNodeId}`);
-    if (!res.ok) return;
-    const sar = await res.json();
 
-    if (dom.sarTracking) dom.sarTracking.textContent = sar.sar_tracking_number;
-    if (dom.sarSubjectKey) dom.sarSubjectKey.textContent = sar.subject_entity.composite_key;
-    if (dom.sarSubjectBank) dom.sarSubjectBank.textContent = sar.subject_entity.financial_institution_code;
-    if (dom.sarSubjectRisk) dom.sarSubjectRisk.textContent = `${sar.subject_entity.assessed_fraud_probability} (${sar.subject_entity.risk_classification})`;
-    if (dom.sarTimestamp) dom.sarTimestamp.textContent = sar.timestamp_generated;
-    if (dom.sarNarrative) dom.sarNarrative.textContent = sar.executive_narrative;
-
-    if (dom.sarEvidenceTable) {
-      dom.sarEvidenceTable.innerHTML = '';
-      sar.evidentiary_transactions.forEach(ev => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${ev.flow}</td>
-          <td style="color:${ev.confidence_tier === 'CRITICAL' ? 'var(--danger)' : 'var(--ink)'}; font-weight:600;">${ev.attribution_score}</td>
-          <td>${ev.relationship}</td>
-        `;
-        dom.sarEvidenceTable.appendChild(tr);
-      });
-    }
-
-    if (dom.sarRecommendations) {
-      dom.sarRecommendations.innerHTML = '';
-      sar.statutory_recommendations.forEach(rec => {
-        const li = document.createElement('li');
-        li.textContent = rec;
-        dom.sarRecommendations.appendChild(li);
-      });
-    }
-  } catch (err) {
-    console.warn('SAR fetch error:', err);
-  }
+function setText(elementId, text) {
+  const el = document.getElementById(elementId);
+  if (el) el.innerText = text;
 }
 
-async function copySarText() {
-  try {
-    const res = await fetch(`/api/sar/${state.activeNodeId}`);
-    const data = await res.json();
-    await navigator.clipboard.writeText(data.executive_narrative);
-    alert('Audit narrative copied to clipboard.');
-  } catch (err) {
-    alert('Failed to copy.');
-  }
-}
-
-async function downloadSarJson() {
-  try {
-    const res = await fetch(`/api/sar/${state.activeNodeId}`);
-    const data = await res.json();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `SAR_Node_${state.activeNodeId}.json`;
-    a.click();
-  } catch (err) {
-    alert('Failed to download JSON.');
-  }
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }

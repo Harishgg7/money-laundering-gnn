@@ -1,0 +1,13 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.log
+data/HI-Small_Trans.csv
+data/*.zip
+.gemini
+.agents
+*.tmp
