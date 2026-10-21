@@ -199,6 +199,15 @@ def build_model(in_channels: int, cfg, edge_channels: int = 6) -> nn.Module:
             num_layers=num_layers,
             dropout=dropout,
         )
+    if m_type in ["advanced_sage", "advanced_graphsage", "hybrid_encoder"]:
+        return AdvancedGraphSAGE(
+            in_channels=in_channels,
+            hidden_channels=hidden_channels,
+            num_layers=num_layers,
+            dropout=dropout,
+            use_residual=getattr(cfg, "USE_RESIDUAL", False),
+            norm_type=getattr(cfg, "NORM_TYPE", "batch"),
+        )
     return AMLNet(
         in_channels=in_channels,
         hidden_channels=hidden_channels,
@@ -206,3 +215,77 @@ def build_model(in_channels: int, cfg, edge_channels: int = 6) -> nn.Module:
         dropout=dropout,
         model_type=m_type,
     )
+
+
+class ResSAGEConvBlock(nn.Module):
+    """SAGEConv with Batch/LayerNorm, ReLU, Dropout, and Residual Skip Connection."""
+    def __init__(self, in_c, out_c, dropout=0.2, norm_type="batch"):
+        super().__init__()
+        self.conv = SAGEConv(in_c, out_c)
+        if norm_type == "layer":
+            self.norm = nn.LayerNorm(out_c)
+        else:
+            self.norm = nn.BatchNorm1d(out_c)
+        self.dropout = dropout
+        self.residual = nn.Linear(in_c, out_c) if in_c != out_c else nn.Identity()
+
+    def forward(self, x, edge_index):
+        identity = self.residual(x)
+        h = self.conv(x, edge_index)
+        h = self.norm(h)
+        h = F.relu(h)
+        h = F.dropout(h, p=self.dropout, training=self.training)
+        return h + identity
+
+
+class AdvancedGraphSAGE(nn.Module):
+    """Configurable GraphSAGE with optional Residuals, LayerNorm, and customizable depth."""
+    def __init__(self, in_channels: int, hidden_channels: int = 128,
+                 num_layers: int = 3, dropout: float = 0.2,
+                 use_residual: bool = True, norm_type: str = "batch"):
+        super().__init__()
+        self.use_residual = use_residual
+        self.blocks = nn.ModuleList()
+
+        dims = [in_channels] + [hidden_channels] * num_layers
+        for i in range(num_layers):
+            if use_residual:
+                self.blocks.append(ResSAGEConvBlock(dims[i], dims[i + 1], dropout=dropout, norm_type=norm_type))
+            else:
+                conv = SAGEConv(dims[i], dims[i + 1])
+                norm = nn.LayerNorm(dims[i + 1]) if norm_type == "layer" else nn.BatchNorm1d(dims[i + 1])
+                self.blocks.append(nn.ModuleDict({"conv": conv, "norm": norm}))
+        self.dropout = dropout
+
+        self.head = nn.Sequential(
+            nn.Linear(hidden_channels, hidden_channels),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_channels, 1),
+        )
+
+    def forward(self, x, edge_index):
+        for block in self.blocks:
+            if self.use_residual:
+                x = block(x, edge_index)
+            else:
+                conv = block["conv"]
+                norm = block["norm"]
+                x = conv(x, edge_index)
+                x = norm(x)
+                x = F.relu(x)
+                x = F.dropout(x, p=self.dropout, training=self.training)
+        return self.head(x)
+
+    def get_embeddings(self, x, edge_index):
+        for block in self.blocks:
+            if self.use_residual:
+                x = block(x, edge_index)
+            else:
+                conv = block["conv"]
+                norm = block["norm"]
+                x = conv(x, edge_index)
+                x = norm(x)
+                x = F.relu(x)
+        return x
+

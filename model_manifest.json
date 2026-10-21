@@ -1,0 +1,75 @@
+{
+  "manifest_version": "1.0",
+  "created_at": "2026-10-21T14:13:03Z",
+  "production_model": {
+    "model_version": "TRACE-HYBRID-v2",
+    "model_name": "GraphSAGE-XGBoost Relational Hybrid",
+    "architecture": "3-layer GraphSAGE (128-dim embeddings) + 29 AML Behavioral Features + XGBoost",
+    "status": "PROMOTED_PRODUCTION",
+    "operating_threshold": 0.9184,
+    "feature_count": 29,
+    "embedding_dim": 128,
+    "total_input_dim": 157,
+    "graph_topology": "Bidirectional (1.65M unique edges)",
+    "metrics": {
+      "pr_auc": 0.4569,
+      "roc_auc": 0.9412,
+      "f1": 0.4886,
+      "precision": 0.7189,
+      "recall": 0.37,
+      "evaluation_split": "15% held-out test split (77,264 accounts)"
+    },
+    "multi_seed_stability": {
+      "seeds_evaluated": [
+        42,
+        123,
+        999,
+        2026
+      ],
+      "pr_auc_mean": 0.4577,
+      "pr_auc_std": 0.0011,
+      "f1_mean": 0.4884,
+      "precision_mean": 0.7304,
+      "recall_mean": 0.3669
+    },
+    "artifacts": {
+      "gnn_encoder": {
+        "path": "models/gnn_encoder.pt",
+        "sha256": "3d0049901334e1d3dd4a529f1110938b53eb897500a24c18ebd3e3818e6c9d35",
+        "size_bytes": 375586
+      },
+      "xgb_classifier": {
+        "path": "models/xgb_classifier.json",
+        "sha256": "4b8e555608122e2c6cc406d087b2a2e975a2da733e2e72997b198b9c77099f21",
+        "size_bytes": 794061
+      },
+      "cached_probabilities": {
+        "path": "models/hybrid_probs.pt",
+        "sha256": "74d1aafbfbd455519e9bcbc3c23202cd8585c076f04640be9aa82c8abfd5a7d4",
+        "size_bytes": 2061557
+      }
+    }
+  },
+  "rollback_model": {
+    "model_version": "TRACE-GSAGE-v1",
+    "model_name": "GraphSAGE 3-Hop Baseline",
+    "architecture": "3-layer GraphSAGE (Topology-only)",
+    "status": "ROLLBACK_READY",
+    "operating_threshold": 0.3781,
+    "feature_count": 11,
+    "metrics": {
+      "pr_auc": 0.342,
+      "roc_auc": 0.906,
+      "f1": 0.368,
+      "precision": 0.57,
+      "recall": 0.271
+    },
+    "artifacts": {
+      "checkpoint": {
+        "path": "checkpoints/best_model.pt",
+        "sha256": "8d37c392f865d2a76404c8e416222f742e406e87580a98dcd96f2c6692aed543",
+        "size_bytes": 511330
+      }
+    }
+  }
+}

@@ -216,7 +216,8 @@ def generate_report_pdf(report: dict) -> bytes:
     model_score = report.get("modelAssessment", {}).get("riskScore", 0.0)
     score_pct = f"{model_score * 100:.1f}%" if isinstance(model_score, (int, float)) else "N/A"
     model_assessment = report.get("modelAssessment", {})
-    raw_thr = model_assessment.get("threshold", 0.3781)
+    model_version = model_assessment.get("modelVersion") or model_assessment.get("model_version") or "TRACE-HYBRID-v2"
+    raw_thr = model_assessment.get("threshold", 0.9184)
     try:
         thr_str = f"{float(raw_thr):.4f}"
     except (ValueError, TypeError):
@@ -379,13 +380,14 @@ def generate_report_pdf(report: dict) -> bytes:
     story.append(ev_table)
     story.append(Spacer(1, 10))
 
-    # 6. Section 4: Intelligence Engine Assessment (GraphSAGE GNN)
-    story.append(Paragraph("4. GRAPH-BASED INTELLIGENCE ASSESSMENT", style_h2))
+    # 6. Section 4: Intelligence Engine Assessment (TRACE-HYBRID-v2)
+    story.append(Paragraph("4. MODEL INTELLIGENCE ASSESSMENT", style_h2))
     gnn_note = (
-        f"The relational Graph Neural Network (GraphSAGE inductive architecture) evaluated subject account "
+        f"The production intelligence engine ({escape_text(model_version)}) evaluated subject account "
         f"<b>{escape_text(report.get('accountId', ''))}</b> with a Model Risk Score of <b>{score_pct}</b> "
         f"relative to the calibrated operational threshold of <b>{thr_str}</b>. "
-        f"This model-assessed risk serves as assistive intelligence to support the human investigator's adjudication."
+        f"This model-assessed risk serves as decision-support assistive intelligence for compliance investigators, "
+        f"combining relational graph embeddings and 29 AML behavioral features."
     )
     gnn_table = Table([[Paragraph(gnn_note, style_body)]], colWidths=[504])
     gnn_table.setStyle(TableStyle([

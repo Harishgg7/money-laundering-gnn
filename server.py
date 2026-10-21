@@ -380,6 +380,31 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
 
 
         # ------------------------------------------------------------------
+        # 6b. MODEL METADATA API: GET /api/model_info
+        # ------------------------------------------------------------------
+        if path == "/api/model_info":
+            svc = get_service()
+            manifest_file = os.path.join(ROOT_DIR, "models", "model_manifest.json")
+            if not os.path.exists(manifest_file):
+                manifest_file = os.path.join(ROOT_DIR, "model_manifest.json")
+            info = {
+                "modelVersion": svc.model_version,
+                "operatingThreshold": svc.val_threshold,
+                "featureCount": 29 if svc.model_version == "TRACE-HYBRID-v2" else 11,
+                "embeddingDim": 128,
+                "totalInputDim": 157 if svc.model_version == "TRACE-HYBRID-v2" else 11,
+                "status": "PROMOTED_PRODUCTION" if svc.model_version == "TRACE-HYBRID-v2" else "ROLLBACK_ACTIVE",
+            }
+            if os.path.exists(manifest_file):
+                try:
+                    with open(manifest_file, "r", encoding="utf-8") as f:
+                        info["manifest"] = json.load(f)
+                except Exception:
+                    pass
+            self._send_json(200, sanitize_terminology(info))
+            return
+
+        # ------------------------------------------------------------------
         # 7. BACKWARD-COMPATIBLE API ENDPOINTS
         # ------------------------------------------------------------------
         if path == "/api/bootstrap":
@@ -522,6 +547,13 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
                 else:
                     # Generate deterministic new report ID
                     new_rep_id = f"REP-2026-00{len(reports) + 42}"
+                    svc = get_service()
+                    model_ass = dict(body.get("modelAssessment", {}))
+                    if "modelVersion" not in model_ass:
+                        model_ass["modelVersion"] = svc.model_version
+                    if "threshold" not in model_ass:
+                        model_ass["threshold"] = round(svc.val_threshold, 4)
+
                     new_report = {
                         "id": new_rep_id,
                         "caseId": body.get("caseId", "CASE-2026-0000"),
@@ -536,7 +568,7 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
                         "whyFlagged": body.get("whyFlagged", ""),
                         "contributingFactors": body.get("contributingFactors", ""),
                         "evidence": body.get("evidence", {}),
-                        "modelAssessment": body.get("modelAssessment", {}),
+                        "modelAssessment": model_ass,
                         "notes": body.get("notes", ""),
                         "createdAt": datetime.now().isoformat() + "Z",
                     }
