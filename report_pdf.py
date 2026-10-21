@@ -215,13 +215,16 @@ def generate_report_pdf(report: dict) -> bytes:
     # 2. Key Metadata Strip (Case ID, Account, Risk Level, Risk Score, Status)
     model_score = report.get("modelAssessment", {}).get("riskScore", 0.0)
     score_pct = f"{model_score * 100:.1f}%" if isinstance(model_score, (int, float)) else "N/A"
-    model_assessment = report.get("modelAssessment", {})
-    model_version = model_assessment.get("modelVersion") or model_assessment.get("model_version") or "TRACE-HYBRID-v2"
-    raw_thr = model_assessment.get("threshold", 0.9184)
-    try:
-        thr_str = f"{float(raw_thr):.4f}"
-    except (ValueError, TypeError):
-        thr_str = escape_text(str(raw_thr))
+    model_assessment = report.get("modelAssessment") if isinstance(report.get("modelAssessment"), dict) else {}
+    model_version = model_assessment.get("modelVersion") or model_assessment.get("model_version") or "Not recorded"
+    raw_thr = model_assessment.get("threshold")
+    if raw_thr is not None:
+        try:
+            thr_str = f"{float(raw_thr):.4f}"
+        except (ValueError, TypeError):
+            thr_str = escape_text(str(raw_thr))
+    else:
+        thr_str = "Not recorded"
 
     meta_cells = [
         [
@@ -380,14 +383,18 @@ def generate_report_pdf(report: dict) -> bytes:
     story.append(ev_table)
     story.append(Spacer(1, 10))
 
-    # 6. Section 4: Intelligence Engine Assessment (TRACE-HYBRID-v2)
+    # 6. Section 4: Intelligence Engine Assessment
     story.append(Paragraph("4. MODEL INTELLIGENCE ASSESSMENT", style_h2))
+    if model_version == "TRACE-HYBRID-v2":
+        feat_desc = "combining relational graph embeddings and 29 AML behavioral features."
+    else:
+        feat_desc = "evaluating multi-hop relational graph topology and transaction structure."
     gnn_note = (
         f"The production intelligence engine ({escape_text(model_version)}) evaluated subject account "
         f"<b>{escape_text(report.get('accountId', ''))}</b> with a Model Risk Score of <b>{score_pct}</b> "
         f"relative to the calibrated operational threshold of <b>{thr_str}</b>. "
         f"This model-assessed risk serves as decision-support assistive intelligence for compliance investigators, "
-        f"combining relational graph embeddings and 29 AML behavioral features."
+        f"{feat_desc}"
     )
     gnn_table = Table([[Paragraph(gnn_note, style_body)]], colWidths=[504])
     gnn_table.setStyle(TableStyle([

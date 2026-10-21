@@ -296,7 +296,7 @@ class TraceService:
                     is_case_high = True
                     break
 
-        if score >= self.val_threshold or score >= 0.70 or is_case_high:
+        if score >= self.val_threshold or is_case_high:
             return "HIGH"
         elif score >= 0.20:
             return "MEDIUM"
@@ -308,7 +308,13 @@ class TraceService:
         if clean_name == self.model_version:
             return
         os.environ["TRACE_MODEL_VERSION"] = clean_name
+        self.model_version = clean_name
         self.cache.clear()
+        self.gnn_model = None
+        self.xgb_clf = None
+        self.x_29 = None
+        self.hybrid_probs = None
+        self.gnn_probs = None
         self._initialize()
 
     def format_account_id(self, node_idx: int) -> str:
@@ -467,7 +473,8 @@ class TraceService:
                     "raw_value": round(val, 3),
                 })
             feature_importance.sort(key=lambda item: item["importance"], reverse=True)
-            fidelity_plus = max(0.0, round(gnn_score - mlp_score, 4))
+            topology_lift = max(0.0, round(gnn_score - mlp_score, 4))
+            fidelity_plus = topology_lift
             log_step("Model feature contribution: XGBoost behavioral and graph feature importance assessed")
         elif run_explainer and self.model_version == "TRACE-GSAGE-v1":
             try:
@@ -507,9 +514,25 @@ class TraceService:
                         "raw_value": round(float(self.data.x[node_idx, i].item()), 3),
                     })
                 feature_importance.sort(key=lambda item: item["importance"], reverse=True)
-                fidelity_plus = max(0.0, round(gnn_score - mlp_score, 4))
+                topology_lift = max(0.0, round(gnn_score - mlp_score, 4))
+                if len(e_mask) > 0 and e_mask.max() > 0:
+                    keep_mask = torch.tensor(e_mask < np.percentile(e_mask, 75), dtype=torch.bool, device=self.device)
+                    ei_drop = sub_ei[:, keep_mask]
+                    ea_drop = sub_ea[keep_mask] if sub_ea is not None else None
+                    with torch.no_grad():
+                        pert_logits = self.gnn_model(sub_x, ei_drop, ea_drop)
+                        pert_prob = (
+                            F.softmax(pert_logits, dim=-1)[local_index, 1].item()
+                            if pert_logits.dim() == 2 and pert_logits.size(1) > 1
+                            else torch.sigmoid(pert_logits.view(-1)[local_index]).item()
+                        )
+                    fidelity_plus = max(0.0, round(gnn_score - float(pert_prob), 4))
+                else:
+                    fidelity_plus = topology_lift
                 log_step("GNNExplainer completed for baseline GraphSAGE")
             except Exception as ex:
+                topology_lift = max(0.0, round(gnn_score - mlp_score, 4))
+                fidelity_plus = topology_lift
                 log_step(f"GNNExplainer fallback ({str(ex)[:36]})")
 
         # Cap rendered neighborhood to top 28 nodes so browser canvas stays clutter-free
@@ -549,7 +572,10 @@ class TraceService:
             if u in sub_set and v in sub_set:
                 imp = edge_weights.get((u, v), 0.0)
                 if imp == 0.0:
-                    imp = float((self.gnn_probs[u].item() + self.gnn_probs[v].item()) * 0.5)
+                    if self.gnn_probs is not None and u < len(self.gnn_probs) and v < len(self.gnn_probs):
+                        imp = float((self.gnn_probs[u].item() + self.gnn_probs[v].item()) * 0.5)
+                    else:
+                        imp = 0.0
                 amt = abs(float(self.data.x[u, 4].item())) * 18400 if self.data.x.size(1) > 4 else 14200.0
                 edges_list.append({
                     "source": u,
@@ -653,13 +679,18 @@ class TraceService:
             "risk_score": round(gnn_score, 4),
             "hybrid_score": round(gnn_score, 4),
             "mlp_score": round(mlp_score, 4),
+            "topology_lift": topology_lift,
             "fidelity_plus": fidelity_plus,
             "risk_level": risk_level,
             "ground_truth": true_label,
             "summary": (
                 f"SUSPICIOUS ACCOUNT ({risk_level} RISK) — Relational multi-hop topology and behavioral features elevate model risk score to {gnn_score*100:.1f}% relative to {self.val_threshold*100:.1f}% operating threshold."
                 if risk_level == "HIGH"
-                else "NORMAL ACCOUNT (LOW RISK) — Low model-assessed risk with acyclic transaction flows and sparse counterparty connectivity."
+                else (
+                    f"ELEVATED ACCOUNT (MEDIUM RISK) — Model-assessed risk score of {gnn_score*100:.1f}% warrants surveillance relative to {self.val_threshold*100:.1f}% operating threshold."
+                    if risk_level == "MEDIUM"
+                    else "NORMAL ACCOUNT (LOW RISK) — Low model-assessed risk with acyclic transaction flows and sparse counterparty connectivity."
+                )
             ),
             "features": feature_items,
             "feature_importance": feature_importance[:6],

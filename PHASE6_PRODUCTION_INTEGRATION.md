@@ -157,7 +157,7 @@ The complete investigator journey was verified across the live application:
 3. **Account Panel:** Slide-over detail panel reflects `TRACE-HYBRID-v2`, threshold `0.9184`, and calibrated risk scores.
 4. **Investigation Dossier:** Complete dossier loads with multi-hop topological graph, 29 behavioral features, and XGBoost feature contributions.
 5. **Report Creation & Adjudication:** Investigator decisions ("File Investigation Report", "Escalate for Further Review", etc.) persist cleanly in `outputs/reports_registry.json`.
-6. **PDF Generation:** Server-side ReportLab engine renders binary PDF including `TRACE-HYBRID-v2`, threshold `0.9184`, top transaction flows, and audit log.
+6. **PDF Generation:** Server-side ReportLab engine renders binary PDF including `TRACE-HYBRID-v2`, threshold `0.9184`, observed transaction patterns, quantitative evidence, and compliance adjudication.
 
 ---
 
@@ -169,7 +169,7 @@ The baseline model is fully preserved for regulatory compliance and operational 
 - **Size:** `511,330` bytes (exact byte count verified)
 - **SHA256:** `8d37c392f865d2a76404c8e416222f742e406e87580a98dcd96f2c6692aed543`
 - **Operating Threshold:** `0.3781`
-- **Runtime Switching:** `TraceService.set_model("TRACE-GSAGE-v1")` or environment variable `TRACE_MODEL_VERSION=TRACE-GSAGE-v1` enables instant runtime rollback without code edits or restarts.
+- **Runtime Switching:** `TraceService.set_model("TRACE-GSAGE-v1")` provides an in-process model switch (where supported by the server instance), while setting the `TRACE_MODEL_VERSION=TRACE-GSAGE-v1` environment variable configures the active model on startup (which requires restarting the server process). Both approaches preserve the rollback model without modifying code.
 
 ---
 

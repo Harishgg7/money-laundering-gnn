@@ -162,10 +162,11 @@ def main():
     try:
         clf = XGBClassifier()
         clf.load_model(str(ROOT_DIR / "models" / "xgb_classifier.json"))
-        n_estimators = clf.n_estimators if hasattr(clf, "n_estimators") else 150
+        n_estimators = clf.get_booster().num_boosted_rounds()
+        assert n_estimators == 150, f"Expected 150 boosted rounds, got {n_estimators}"
         assert clf.n_features_in_ == 157, f"Expected 157 features (128+29), got {clf.n_features_in_}"
 
-        print(f"[PASS] Test 05: XGBoost classifier loads cleanly      | Trees=150, InputFeatures=157 (128 embeddings + 29 AML)", flush=True)
+        print(f"[PASS] Test 05: XGBoost classifier loads cleanly      | Trees={n_estimators}, InputFeatures=157 (128 embeddings + 29 AML)", flush=True)
         passed += 1
     except Exception as e:
         print(f"[FAIL] Test 05: XGBoost load failed: {e}", flush=True)
@@ -340,6 +341,8 @@ def main():
         })
         assert st_rep == 201
         report_id = rep["id"]
+        assert rep.get("modelAssessment", {}).get("modelVersion") == "TRACE-HYBRID-v2"
+        assert rep.get("modelAssessment", {}).get("threshold") == 0.9184
 
         # Fetch PDF
         st_pdf, ctype, pdf_bytes = get_raw(f"/api/reports/{report_id}/pdf")
@@ -402,7 +405,8 @@ def main():
         print(f"[FAIL] Test 17: Compliance terminology audit failed: {e}", flush=True)
 
     print("=" * 80)
-    print(f"  PHASE 6 INTEGRATION RESULTS: {passed}/{total} TESTS PASSED (100% SUCCESS)")
+    success_pct = (passed / total) * 100 if total > 0 else 0.0
+    print(f"  PHASE 6 INTEGRATION RESULTS: {passed}/{total} TESTS PASSED ({success_pct:.0f}% SUCCESS)")
     print("=" * 80)
 
     if passed != total:

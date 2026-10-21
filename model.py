@@ -264,7 +264,7 @@ class AdvancedGraphSAGE(nn.Module):
             nn.Linear(hidden_channels, 1),
         )
 
-    def forward(self, x, edge_index):
+    def forward(self, x, edge_index, edge_attr=None):
         for block in self.blocks:
             if self.use_residual:
                 x = block(x, edge_index)
@@ -275,9 +275,9 @@ class AdvancedGraphSAGE(nn.Module):
                 x = norm(x)
                 x = F.relu(x)
                 x = F.dropout(x, p=self.dropout, training=self.training)
-        return self.head(x)
+        return self.head(x).squeeze(-1)
 
-    def get_embeddings(self, x, edge_index):
+    def get_embeddings(self, x, edge_index, edge_attr=None):
         for block in self.blocks:
             if self.use_residual:
                 x = block(x, edge_index)
@@ -288,4 +288,5 @@ class AdvancedGraphSAGE(nn.Module):
                 x = norm(x)
                 x = F.relu(x)
         return x
+
 

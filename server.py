@@ -48,7 +48,7 @@ from trace_service import TraceService
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(ROOT_DIR, "static")
-REPORTS_FILE = os.path.join(ROOT_DIR, "outputs", "reports_registry.json")
+REPORTS_FILE = os.environ.get("TRACE_REPORTS_FILE") or os.path.join(ROOT_DIR, "outputs", "reports_registry.json")
 SERVICE = None
 SERVICE_LOCK = threading.Lock()
 REPORTS_LOCK = threading.Lock()
@@ -548,7 +548,8 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
                     # Generate deterministic new report ID
                     new_rep_id = f"REP-2026-00{len(reports) + 42}"
                     svc = get_service()
-                    model_ass = dict(body.get("modelAssessment", {}))
+                    raw_model_ass = body.get("modelAssessment")
+                    model_ass = dict(raw_model_ass) if isinstance(raw_model_ass, dict) else {}
                     if "modelVersion" not in model_ass:
                         model_ass["modelVersion"] = svc.model_version
                     if "threshold" not in model_ass:
