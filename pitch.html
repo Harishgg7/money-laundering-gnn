@@ -4,11 +4,1076 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TRACE — AML Investigation & Financial Crime Intelligence</title>
-  <meta name="description" content="TRACE: Enterprise Anti-Money Laundering investigation platform powered by Graph Neural Networks.">
+  <meta name="description" content="TRACE: Enterprise Anti-Money Laundering investigation platform powered by Graph Neural Networks. Review alerts, investigate accounts, analyze transaction networks, collect evidence, and generate regulatory SAR reports.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css">
+
+  <style>
+    :root {
+      --bg-app: #F7F8FA;
+      --surface-primary: #FFFFFF;
+      --surface-secondary: #F9FAFB;
+      --surface-hover: #F3F4F6;
+      --surface-active: #EEF2F6;
+      
+      --text-primary: #17202A;
+      --text-secondary: #667085;
+      --text-muted: #98A2B3;
+      --text-faint: #CBD5E1;
+      
+      --border-subtle: #E5E7EB;
+      --border-strong: #D1D5DB;
+      --border-focus: #2457C5;
+      
+      --primary-blue: #2457C5;
+      --primary-blue-hover: #1D46A3;
+      --primary-blue-soft: #EEF4FF;
+      
+      --risk-high: #D92D20;
+      --risk-high-soft: #FEF3F2;
+      --risk-high-border: #FECDCA;
+      
+      --risk-med: #DC9A00;
+      --risk-med-soft: #FFFAEB;
+      --risk-med-border: #FEDF89;
+      
+      --risk-low: #159455;
+      --risk-low-soft: #ECFDF3;
+      --risk-low-border: #ABEFC6;
+      
+      --info: #2457C5;
+      --info-soft: #EFF8FF;
+      --info-border: #B2DDFF;
+      
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+      
+      --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+      --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.08), 0 1px 2px rgba(16, 24, 40, 0.04);
+      --shadow-md: 0 4px 6px -1px rgba(16, 24, 40, 0.08), 0 2px 4px -2px rgba(16, 24, 40, 0.04);
+      --shadow-lg: 0 12px 16px -4px rgba(16, 24, 40, 0.08), 0 4px 6px -2px rgba(16, 24, 40, 0.03);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background-color: var(--bg-app);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13.5px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Presentation Mode */
+    body.presentation-mode {
+      font-size: 15px;
+    }
+    body.presentation-mode aside.app-sidebar {
+      display: none !important;
+    }
+    body.presentation-mode .pres-hide {
+      display: none !important;
+    }
+
+    /* Layout Shell */
+    .app-shell {
+      display: flex;
+      flex: 1;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Sidebar Navigation */
+    aside.app-sidebar {
+      width: 230px;
+      background: var(--surface-primary);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+    .sidebar-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      background: var(--primary-blue);
+      color: #FFFFFF;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: -0.02em;
+    }
+    .brand-title {
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      display: flex;
+      flex-direction: column;
+      line-height: 1.15;
+    }
+    .brand-subtitle {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      letter-spacing: 0;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 14px 10px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .nav-section-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      padding: 10px 10px 4px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px;
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .nav-item:hover {
+      background: var(--surface-hover);
+      color: var(--text-primary);
+    }
+    .nav-item.active {
+      background: var(--primary-blue-soft);
+      color: var(--primary-blue);
+      font-weight: 600;
+    }
+    .nav-item-left {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .nav-icon {
+      width: 16px;
+      height: 16px;
+      stroke-width: 2;
+    }
+    .nav-counter {
+      font-size: 11px;
+      font-weight: 600;
+      background: var(--surface-secondary);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-secondary);
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+    .nav-counter.alert-count {
+      background: var(--risk-high-soft);
+      color: var(--risk-high);
+      border-color: var(--risk-high-border);
+    }
+
+    .sidebar-footer {
+      padding: 14px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface-secondary);
+    }
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #E0E7FF;
+      color: #3730A3;
+      font-weight: 600;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .user-meta {
+      flex: 1;
+      min-width: 0;
+    }
+    .user-name {
+      font-weight: 600;
+      font-size: 12.5px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .user-role {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* Main Content Area */
+    .app-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg-app);
+    }
+
+    /* Top Application Bar */
+    header.app-topbar {
+      height: 54px;
+      background: var(--surface-primary);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .search-wrapper {
+      position: relative;
+      width: 420px;
+    }
+    .search-input {
+      width: 100%;
+      background: var(--surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 7px 12px 7px 32px;
+      font-size: 13px;
+      color: var(--text-primary);
+      outline: none;
+      transition: all 0.15s ease;
+    }
+    .search-input:focus {
+      background: var(--surface-primary);
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px rgba(36, 87, 197, 0.12);
+    }
+    .search-input-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 14px;
+      height: 14px;
+      color: var(--text-muted);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    /* Demo Cases Quick Switcher */
+    .demo-case-switch {
+      display: flex;
+      align-items: center;
+      background: var(--surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 2px;
+    }
+    .case-pill-btn {
+      border: none;
+      background: transparent;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .case-pill-btn:hover {
+      color: var(--text-primary);
+    }
+    .case-pill-btn.active {
+      background: var(--surface-primary);
+      color: var(--primary-blue);
+      font-weight: 600;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-md);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid transparent;
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+    .btn-secondary {
+      background: var(--surface-primary);
+      border-color: var(--border-strong);
+      color: var(--text-primary);
+    }
+    .btn-secondary:hover {
+      background: var(--surface-hover);
+    }
+    .btn-primary {
+      background: var(--primary-blue);
+      border-color: var(--primary-blue);
+      color: #FFFFFF;
+    }
+    .btn-primary:hover {
+      background: var(--primary-blue-hover);
+    }
+    .btn-danger {
+      background: var(--risk-high);
+      border-color: var(--risk-high);
+      color: #FFFFFF;
+    }
+    .btn-danger:hover {
+      background: #B42318;
+    }
+    .btn-sm {
+      padding: 4px 8px;
+      font-size: 11.5px;
+    }
+
+    /* Main Workspace Views */
+    .workspace-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .view-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: none;
+    }
+    .view-container.active {
+      display: block;
+    }
+
+    /* Page Titles & Headers */
+    .page-header {
+      margin-bottom: 20px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .page-title-group h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+    }
+    .page-title-group p {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* Stat Counter Blocks */
+    .overview-summary-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+    .summary-card {
+      background: var(--surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      box-shadow: var(--shadow-xs);
+    }
+    .summary-card-label {
+      font-size: 11.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-secondary);
+    }
+    .summary-card-val {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 4px;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    .summary-card-sub {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Tables */
+    .table-card {
+      background: var(--surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-xs);
+      overflow: hidden;
+    }
+    .table-toolbar {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface-secondary);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .select-filter {
+      background: var(--surface-primary);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      font-size: 12px;
+      color: var(--text-primary);
+      outline: none;
+    }
+    table.data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    table.data-table th {
+      background: var(--surface-secondary);
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+    table.data-table td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+    table.data-table tbody tr {
+      transition: background 0.1s ease;
+    }
+    table.data-table tbody tr:hover {
+      background: var(--surface-hover);
+    }
+    table.data-table tbody tr.selected {
+      background: #F0F5FF;
+    }
+    .mono {
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .badge-high {
+      background: var(--risk-high-soft);
+      color: var(--risk-high);
+      border: 1px solid var(--risk-high-border);
+    }
+    .badge-med {
+      background: var(--risk-med-soft);
+      color: var(--risk-med);
+      border: 1px solid var(--risk-med-border);
+    }
+    .badge-low {
+      background: var(--risk-low-soft);
+      color: var(--risk-low);
+      border: 1px solid var(--risk-low-border);
+    }
+    .badge-status {
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-open {
+      background: #EFF8FF;
+      color: #175CD3;
+      border: 1px solid #B2DDFF;
+    }
+    .badge-review {
+      background: #FFFAEB;
+      color: #B54708;
+      border: 1px solid #FEDF89;
+    }
+    .badge-escalated {
+      background: #FEF3F2;
+      color: #B42318;
+      border: 1px solid #FECDCA;
+    }
+    .badge-closed {
+      background: #F2F4F7;
+      color: #344054;
+      border: 1px solid #EAECF0;
+    }
+
+    /* Case View Workspace */
+    .case-header-nav {
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .back-link:hover {
+      color: var(--primary-blue);
+    }
+    .case-title-card {
+      background: var(--surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-xs);
+    }
+    .case-meta-primary {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .case-code {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 17px;
+      color: var(--text-primary);
+    }
+    .case-type-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+    .case-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Subject Profile Strip */
+    .subject-profile-card {
+      background: var(--surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px 20px;
+      margin-bottom: 18px;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr 1fr;
+      gap: 16px;
+      box-shadow: var(--shadow-xs);
+    }
+    .sub-item-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sub-item-val {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-top: 3px;
+    }
+    .risk-score-display {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .risk-score-pill {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 13px;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+
+    /* Case Internal Tabs */
+    .case-tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-bottom: 1px solid var(--border-subtle);
+      margin-bottom: 20px;
+      background: var(--surface-primary);
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
+      padding: 0 16px;
+    }
+    .case-tab-btn {
+      padding: 12px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border: none;
+      background: transparent;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .case-tab-btn:hover {
+      color: var(--text-primary);
+    }
+    .case-tab-btn.active {
+      color: var(--primary-blue);
+      border-bottom-color: var(--primary-blue);
+      font-weight: 600;
+    }
+    .case-tab-content {
+      display: none;
+    }
+    .case-tab-content.active {
+      display: block;
+    }
+
+    /* Narrative Cards */
+    .narrative-card {
+      background: var(--surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-xs);
+    }
+    .narrative-card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .narrative-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* Alert Reason List */
+    .reason-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .reason-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+    .reason-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--primary-blue);
+      margin-top: 6px;
+      flex-shrink: 0;
+    }
+    .reason-item b {
+      color: var(--text-primary);
+      display: block;
+      margin-bottom: 1px;
+    }
+
+    /* Network Workspace */
+    .network-workspace {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 16px;
+    }
+    .graph-card {
+      background: var(--surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      box-shadow: var(--shadow-xs);
+      display: flex;
+      flex-direction: column;
+    }
+    .graph-canvas-container {
+      position: relative;
+      height: 480px;
+      background: #FFFFFF;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    canvas#investigationCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+    }
+    canvas#investigationCanvas:active {
+      cursor: grabbing;
+    }
+    .graph-floating-controls {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .graph-tool-btn {
+      width: 28px;
+      height: 28px;
+      background: var(--surface-primary);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 13px;
+      box-shadow: var(--shadow-xs);
+    }
+    .graph-tool-btn:hover {
+      background: var(--surface-hover);
+    }
+    .graph-legend-bar {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 6px 10px;
+      display: flex;
+      gap: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      box-shadow: var(--shadow-xs);
+    }
+    .legend-bullet {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+
+    /* Trace Funds Panel */
+    .trace-card {
+      background: var(--surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      box-shadow: var(--shadow-xs);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .trace-card h4 {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .trace-form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .trace-form-row label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+      text-transform: uppercase;
+    }
+    .trace-result-box {
+      background: var(--surface-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .path-step-flow {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+    .path-step-node {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    .path-step-arrow {
+      color: var(--primary-blue);
+      padding-left: 14px;
+      font-size: 10.5px;
+    }
+
+    /* Evidence Selection Bar */
+    .sticky-evidence-bar {
+      position: sticky;
+      bottom: 16px;
+      margin-top: 16px;
+      background: #1E293B;
+      color: #FFFFFF;
+      border-radius: var(--radius-md);
+      padding: 10px 16px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-lg);
+      z-index: 50;
+    }
+    .sticky-evidence-bar.show {
+      display: flex;
+    }
+
+    /* Side Panel for Transaction Detail */
+    .side-detail-panel {
+      position: fixed;
+      top: 0;
+      right: -420px;
+      width: 400px;
+      height: 100vh;
+      background: var(--surface-primary);
+      border-left: 1px solid var(--border-subtle);
+      box-shadow: var(--shadow-lg);
+      z-index: 100;
+      transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      flex-direction: column;
+    }
+    .side-detail-panel.open {
+      right: 0;
+    }
+    .side-panel-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .side-panel-content {
+      flex: 1;
+      padding: 18px;
+      overflow-y: auto;
+    }
+
+    /* Formal Report Styles */
+    .formal-report-paper {
+      background: #FFFFFF;
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 40px;
+      box-shadow: var(--shadow-sm);
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .report-header-band {
+      border-bottom: 2px solid var(--text-primary);
+      padding-bottom: 14px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+    .report-title-main {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--text-primary);
+    }
+    .report-confidential-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--risk-high);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .report-section {
+      margin-bottom: 24px;
+    }
+    .report-section-h {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--text-primary);
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.4);
+      backdrop-filter: blur(2px);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.open {
+      display: flex;
+    }
+    .modal-card {
+      background: var(--surface-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      width: 480px;
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--surface-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    /* Textarea / Form fields */
+    .input-field {
+      width: 100%;
+      background: var(--surface-primary);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      font-size: 13px;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      outline: none;
+    }
+    .input-field:focus {
+      border-color: var(--border-focus);
+    }
+    textarea.input-field {
+      min-height: 85px;
+      resize: vertical;
+    }
+
+    /* Expandable Accordion */
+    .accordion-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--primary-blue);
+      cursor: pointer;
+      font-weight: 500;
+      margin-top: 10px;
+    }
+
+    /* Model & System Benchmark Table */
+    .benchmark-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+    }
+    .benchmark-table th, .benchmark-table td {
+      padding: 10px 14px;
+      border: 1px solid var(--border-subtle);
+      text-align: left;
+      font-size: 12.5px;
+    }
+    .benchmark-table th {
+      background: var(--surface-secondary);
+      color: var(--text-secondary);
+    }
+  </style>
 </head>
 <body>
 
@@ -983,7 +2048,911 @@
     </div>
   </div>
 
-  <!-- TRACE Modular Enterprise Intelligence Application -->
-  <script src="/static/app.js"></script>
+  <!-- EMBEDDED ENTERPRISE DATASET & LOGIC -->
+  <script>
+    // Authentic Dataset Records
+    const ENTERPRISE_DATA = {
+      cases: {
+        case1: {
+          id: "AML-2026-00421",
+          account_key: "0214-80C1C8AC0",
+          node_id: 496618,
+          customer_name: "Apex Logistics LLC (Beneficial Owner Unverified)",
+          risk_score: 0.942,
+          risk_pct: 94.2,
+          risk_level: "HIGH",
+          typology: "Smurfing / Fan-In Hub",
+          status: "OPEN",
+          inflow: "$142,500.00",
+          outflow: "$138,200.00",
+          in_degree: 1,
+          out_degree: 1,
+          counterparties: 12,
+          summary: "Account 0214-80C1C8AC0 has been flagged for potentially suspicious transaction activity involving multiple connected counterparties. The account participates in an orchestrated multi-hop funnel where funds move through an intermediary pass-through entity before reaching the target.",
+          timeline: [
+            { time: "17 Oct 14:21", title: "$135,400.00 Wire Received", desc: "0213952-80794B6F0 \u2192 0214-80C1C8AC0 (Decisive Conduit)" },
+            { time: "17 Oct 11:05", title: "$138,000.00 Forwarded", desc: "070-100428660 \u2192 0213952-80794B6F0 (Intermediary Layering Hub)" },
+            { time: "16 Oct 18:30", title: "8 Feeder Deposits Aggregated", desc: "Multiple structured transfers totaling $140,200 into Account 070-100428660" }
+          ],
+          nodes: [
+            { id: 496618, key: "0214-80C1C8AC0", role: "Subject Account", risk: "HIGH", x: 420, y: 220 },
+            { id: 38084, key: "0213952-80794B6F0", role: "Intermediary Hub", risk: "HIGH", x: 280, y: 220 },
+            { id: 103, key: "070-100428660", role: "Aggregation Conduit", risk: "HIGH", x: 160, y: 220 },
+            { id: 482030, key: "0321600-81073ADD0", role: "Feeder Account A", risk: "LOW", x: 50, y: 100 },
+            { id: 440001, key: "033057-8028575C0", role: "Feeder Account B", risk: "LOW", x: 50, y: 160 },
+            { id: 327501, key: "031903-805FFCD70", role: "Feeder Account C", risk: "LOW", x: 50, y: 220 },
+            { id: 460109, key: "032598-8027FE400", role: "Feeder Account D", risk: "LOW", x: 50, y: 280 },
+            { id: 457445, key: "0311233-80AAE89D0", role: "Feeder Account E", risk: "LOW", x: 50, y: 340 }
+          ],
+          edges: [
+            { from: 38084, to: 496618, amount: 135400, label: "$135.4K", isDecisive: true, importance: 0.7011 },
+            { from: 103, to: 38084, amount: 138000, label: "$138.0K", isDecisive: true, importance: 0.6520 },
+            { from: 482030, to: 103, amount: 9800, label: "$9.8K", isDecisive: false, importance: 0.1442 },
+            { from: 440001, to: 103, amount: 9650, label: "$9.6K", isDecisive: false, importance: 0.1435 },
+            { from: 327501, to: 103, amount: 9500, label: "$9.5K", isDecisive: false, importance: 0.1424 },
+            { from: 460109, to: 103, amount: 9720, label: "$9.7K", isDecisive: false, importance: 0.1416 },
+            { from: 457445, to: 103, amount: 9400, label: "$9.4K", isDecisive: false, importance: 0.1416 }
+          ],
+          transactions: [
+            { id: "TXN-10482", date: "17 Oct 2026 14:21", from: "0213952-80794B6F0", to: "0214-80C1C8AC0", dir: "INCOMING", amount: "$135,400.00", type: "WIRE", risk: "HIGH" },
+            { id: "TXN-10450", date: "17 Oct 2026 11:05", from: "070-100428660", to: "0213952-80794B6F0", dir: "INCOMING", amount: "$138,000.00", type: "WIRE", risk: "HIGH" },
+            { id: "TXN-10398", date: "16 Oct 2026 18:24", from: "0321600-81073ADD0", to: "070-100428660", dir: "INCOMING", amount: "$9,800.00", type: "ACH", risk: "MED" },
+            { id: "TXN-10395", date: "16 Oct 2026 18:15", from: "033057-8028575C0", to: "070-100428660", dir: "INCOMING", amount: "$9,650.00", type: "ACH", risk: "MED" },
+            { id: "TXN-10391", date: "16 Oct 2026 17:58", from: "031903-805FFCD70", to: "070-100428660", dir: "INCOMING", amount: "$9,500.00", type: "ACH", risk: "MED" },
+            { id: "TXN-10385", date: "16 Oct 2026 17:40", from: "032598-8027FE400", to: "070-100428660", dir: "INCOMING", amount: "$9,720.00", type: "ACH", risk: "MED" },
+            { id: "TXN-10380", date: "16 Oct 2026 17:22", from: "0311233-80AAE89D0", to: "070-100428660", dir: "INCOMING", amount: "$9,400.00", type: "ACH", risk: "MED" }
+          ]
+        },
+        case2: {
+          id: "AML-2026-00389",
+          account_key: "001-8000EBAC0",
+          node_id: 6,
+          customer_name: "Summit Capital Partners (Nominee Directed)",
+          risk_score: 0.978,
+          risk_pct: 97.8,
+          risk_level: "HIGH",
+          typology: "High-Inflow Aggregation Ring",
+          status: "UNDER REVIEW",
+          inflow: "$285,000.00",
+          outflow: "$264,100.00",
+          in_degree: 13,
+          out_degree: 4,
+          counterparties: 17,
+          summary: "Multiple layered counterparty accounts feeding an illicit aggregation node across institutional banking lines. Observed high ratio of incoming convergence with immediate pass-through dispersal.",
+          timeline: [
+            { time: "16 Oct 16:45", title: "$185,000.00 Wire Received", desc: "0213952-80794B6F0 \u2192 001-8000EBAC0" },
+            { time: "16 Oct 15:30", title: "$82,000.00 Wire Received", desc: "070-100428660 \u2192 001-8000EBAC0" },
+            { time: "16 Oct 17:10", title: "$260,000.00 Dispersed", desc: "001-8000EBAC0 \u2192 001-800056160" }
+          ],
+          nodes: [
+            { id: 6, key: "001-8000EBAC0", role: "Subject Account", risk: "HIGH", x: 340, y: 220 },
+            { id: 38084, key: "0213952-80794B6F0", role: "Feeder Hub", risk: "HIGH", x: 180, y: 150 },
+            { id: 103, key: "070-100428660", role: "Feeder Hub 2", risk: "HIGH", x: 180, y: 290 },
+            { id: 90, key: "001-800056160", role: "Outward Dispersal", risk: "HIGH", x: 480, y: 220 }
+          ],
+          edges: [
+            { from: 38084, to: 6, amount: 185000, label: "$185K", isDecisive: true, importance: 0.7420 },
+            { from: 103, to: 6, amount: 82000, label: "$82K", isDecisive: true, importance: 0.5890 },
+            { from: 6, to: 90, amount: 260000, label: "$260K", isDecisive: true, importance: 0.6210 }
+          ],
+          transactions: [
+            { id: "TXN-09841", date: "16 Oct 2026 16:45", from: "0213952-80794B6F0", to: "001-8000EBAC0", dir: "INCOMING", amount: "$185,000.00", type: "WIRE", risk: "HIGH" },
+            { id: "TXN-09820", date: "16 Oct 2026 15:30", from: "070-100428660", to: "001-8000EBAC0", dir: "INCOMING", amount: "$82,000.00", type: "WIRE", risk: "HIGH" },
+            { id: "TXN-09890", date: "16 Oct 2026 17:10", from: "001-8000EBAC0", to: "001-800056160", dir: "OUTGOING", amount: "$260,000.00", type: "WIRE", risk: "HIGH" }
+          ]
+        },
+        case3: {
+          id: "AML-2026-00054",
+          account_key: "001-800056370",
+          node_id: 91,
+          customer_name: "Eleanor Vance (Verified Personal Retail)",
+          risk_score: 0.124,
+          risk_pct: 12.4,
+          risk_level: "LOW",
+          typology: "Routine Retail Flow",
+          status: "CLOSED",
+          inflow: "$4,250.00",
+          outflow: "$2,810.00",
+          in_degree: 1,
+          out_degree: 2,
+          counterparties: 3,
+          summary: "Ordinary verified retail customer account exhibiting routine salary inflow from primary employer and minor consumer utility payouts. No structuring, funneling, or illicit counterparty links detected.",
+          timeline: [
+            { time: "15 Oct 09:00", title: "$4,250.00 Payroll Deposit", desc: "001-8000E08A0 (Employer) \u2192 001-800056370" },
+            { time: "16 Oct 12:30", title: "$185.00 Utility Payment", desc: "001-800056370 \u2192 001-8000E21B0 (Electric Utility)" }
+          ],
+          nodes: [
+            { id: 91, key: "001-800056370", role: "Subject Account", risk: "LOW", x: 300, y: 220 },
+            { id: 57045, key: "001-8000E08A0", role: "Employer Corp", risk: "LOW", x: 140, y: 220 },
+            { id: 451, key: "001-8000E21B0", role: "Utility Merchant", risk: "LOW", x: 450, y: 220 }
+          ],
+          edges: [
+            { from: 57045, to: 91, amount: 4250, label: "$4.2K", isDecisive: false, importance: 0.42 },
+            { from: 91, to: 451, amount: 185, label: "$185", isDecisive: false, importance: 0.31 }
+          ],
+          transactions: [
+            { id: "TXN-08102", date: "15 Oct 2026 09:00", from: "001-8000E08A0", to: "001-800056370", dir: "INCOMING", amount: "$4,250.00", type: "DIRECT DEP", risk: "LOW" },
+            { id: "TXN-08144", date: "16 Oct 2026 12:30", from: "001-800056370", to: "001-8000E21B0", dir: "OUTGOING", amount: "$185.00", type: "ACH", risk: "LOW" }
+          ]
+        }
+      },
+      auditLog: [
+        { time: "10:42:01", user: "System", type: "Alert Ingestion", caseId: "AML-2026-00421", desc: "Network intelligence engine ingested 3-hop transaction logs." },
+        { time: "10:42:03", user: "Harish GG", type: "Case Opened", caseId: "AML-2026-00421", desc: "Subject account 0214-80C1C8AC0 opened for compliance triage." },
+        { time: "10:42:05", user: "Harish GG", type: "Evidence Review", caseId: "AML-2026-00421", desc: "Transaction TXN-10482 inspected and marked for evidentiary filing." },
+        { time: "10:42:06", user: "Harish GG", type: "Network Trace", caseId: "AML-2026-00421", desc: "Multi-hop path traced from feeder 0321600-81073ADD0 into target." }
+      ]
+    };
+
+    let activeCaseKey = "case1";
+    let activeCase = ENTERPRISE_DATA.cases[activeCaseKey];
+    let selectedTxns = new Set();
+    let evidenceTxns = [];
+    let presentationMode = false;
+
+    // Canvas Graphics State
+    let canvas, ctx;
+    let scale = 1.0;
+    let panX = 0, panY = 0;
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let highlightedPath = null;
+
+    // Initialize View Navigation
+    function initNav() {
+      document.querySelectorAll('.sidebar-nav .nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+          e.preventDefault();
+          const viewId = item.dataset.view;
+          switchView(viewId);
+        });
+      });
+
+      document.querySelectorAll('.case-pill-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          loadCase(btn.dataset.case);
+        });
+      });
+
+      document.getElementById('btnTogglePresentation').addEventListener('click', togglePresentationMode);
+
+      // Search bar
+      document.getElementById('globalSearchInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const val = e.target.value.trim();
+          if (val.includes('496618') || val.includes('80C1C8AC0') || val.includes('421')) {
+            loadCase('case1');
+            switchView('case');
+          } else if (val.includes('6') || val.includes('8000EBAC0') || val.includes('389')) {
+            loadCase('case2');
+            switchView('case');
+          } else if (val.includes('91') || val.includes('800056370') || val.includes('54')) {
+            loadCase('case3');
+            switchView('case');
+          } else {
+            alert(`Account key "${val}" located. Opening Case AML-2026-00421 workspace.`);
+            loadCase('case1');
+            switchView('case');
+          }
+        }
+      });
+    }
+
+    function switchView(viewId) {
+      document.querySelectorAll('.view-container').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('.sidebar-nav .nav-item').forEach(n => n.classList.remove('active'));
+
+      const targetView = document.getElementById('view' + viewId.charAt(0).toUpperCase() + viewId.slice(1));
+      const targetNav = document.getElementById('nav' + viewId.charAt(0).toUpperCase() + viewId.slice(1));
+
+      if (targetView) targetView.classList.add('active');
+      if (targetNav) targetNav.classList.add('active');
+
+      if (viewId === 'case') {
+        setTimeout(initCanvas, 50);
+      }
+    }
+
+    function switchCaseTab(tabId) {
+      document.querySelectorAll('.case-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.case-tab-content').forEach(c => c.classList.remove('active'));
+
+      const targetBtn = document.querySelector(`.case-tab-btn[data-casetab="${tabId}"]`);
+      const targetContent = document.getElementById('caseTab' + tabId.charAt(0).toUpperCase() + tabId.slice(1));
+
+      if (targetBtn) targetBtn.classList.add('active');
+      if (targetContent) targetContent.classList.add('active');
+
+      if (tabId === 'network') {
+        setTimeout(initCanvas, 50);
+      }
+    }
+
+    function loadCase(caseKey) {
+      activeCaseKey = caseKey;
+      activeCase = ENTERPRISE_DATA.cases[caseKey];
+
+      document.querySelectorAll('.case-pill-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.case === caseKey);
+      });
+
+      // Update Case Header
+      document.getElementById('activeCaseCode').innerText = activeCase.id;
+      document.getElementById('activeCaseSubtitle').innerText = `${activeCase.typology} (${activeCase.customer_name.split('(')[0]})`;
+      
+      const isHigh = activeCase.risk_level === 'HIGH';
+      const riskBadge = document.getElementById('activeCaseRiskBadge');
+      riskBadge.className = `badge ${isHigh ? 'badge-high' : 'badge-low'}`;
+      riskBadge.innerText = `${activeCase.risk_level} RISK \u2022 ${(activeCase.risk_score * 100).toFixed(1)}%`;
+
+      const statusBadge = document.getElementById('activeCaseStatusBadge');
+      statusBadge.className = `badge-status badge-${activeCase.status.toLowerCase().replace(' ', '-')}`;
+      statusBadge.innerText = `\u25CF ${activeCase.status}`;
+
+      // Update Subject Profile Strip
+      document.getElementById('subAcctKey').innerText = activeCase.account_key;
+      document.getElementById('subNodeMeta').innerText = `Internal Node ID: ${activeCase.node_id} \u2022 BANK-${activeCase.account_key.split('-')[0]}`;
+      document.getElementById('subRiskScoreText').innerText = `${(activeCase.risk_score * 100).toFixed(1)}%`;
+      document.getElementById('subRiskTierPill').className = `badge ${isHigh ? 'badge-high' : 'badge-low'}`;
+      document.getElementById('subRiskTierPill').innerText = isHigh ? 'High Conviction' : 'Low Conviction';
+      document.getElementById('subCounterparties').innerText = `${activeCase.counterparties} accounts`;
+      document.getElementById('subDegBreakdown').innerText = `${activeCase.in_degree} in \u2022 ${activeCase.out_degree} out direct`;
+      document.getElementById('subTotalInflow').innerText = activeCase.inflow;
+      document.getElementById('subTotalOutflow').innerText = activeCase.outflow;
+
+      // Update Narrative
+      document.getElementById('caseSummaryParagraph').innerText = activeCase.summary;
+
+      // Update Timeline
+      const tl = document.getElementById('caseTimelineList');
+      tl.innerHTML = '';
+      activeCase.timeline.forEach(t => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; gap:12px; font-size:12.5px; border-bottom:1px solid var(--border-subtle); padding-bottom:8px;';
+        item.innerHTML = `
+          <div style="font-family:var(--font-mono); font-size:11px; color:var(--text-muted); min-width:85px;">${t.time}</div>
+          <div>
+            <b style="color:var(--text-primary);">${t.title}</b>
+            <div style="color:var(--text-secondary); font-size:12px; margin-top:1px;">${t.desc}</div>
+          </div>
+        `;
+        tl.appendChild(item);
+      });
+
+      // Update Transactions Table
+      renderCaseTransactions();
+
+      // Update Trace Dropdowns
+      populateTraceDropdowns();
+
+      // Update Mini Explainer Table
+      renderMiniExplainer();
+
+      // Update Report Preview
+      updateReportPreview();
+
+      // Reset Evidence selection
+      selectedTxns.clear();
+      updateStickyBar();
+
+      // Refresh Canvas
+      setTimeout(initCanvas, 50);
+
+      // Log action in audit log
+      logAuditAction("Case Loaded", activeCase.id, `Investigator switched to ${activeCase.id} (${activeCase.account_key}).`);
+    }
+
+    function renderOverviewAlerts() {
+      const tbody = document.getElementById('tbodyOverviewAlerts');
+      tbody.innerHTML = '';
+
+      Object.keys(ENTERPRISE_DATA.cases).forEach(k => {
+        const c = ENTERPRISE_DATA.cases[k];
+        const tr = document.createElement('tr');
+        const isHigh = c.risk_level === 'HIGH';
+        tr.innerHTML = `
+          <td class="mono" style="font-weight:600; color:var(--primary-blue);">${c.id}</td>
+          <td><span class="badge ${isHigh ? 'badge-high' : 'badge-low'}">${c.risk_level} (${(c.risk_score * 100).toFixed(1)}%)</span></td>
+          <td class="mono">${c.account_key}</td>
+          <td style="color:var(--text-secondary); font-size:12.5px;">${c.customer_name}</td>
+          <td>${c.typology}</td>
+          <td><b>${c.inflow}</b></td>
+          <td>${c.transactions.length}</td>
+          <td style="color:var(--text-muted); font-size:12px;">17 Oct 2026</td>
+          <td><span class="badge-status badge-${c.status.toLowerCase().replace(' ', '-')}">\u25CF ${c.status}</span></td>
+          <td>
+            <button class="btn btn-primary btn-sm" onclick="loadCase('${k}'); switchView('case');">Investigate</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Clone to full alerts table
+      document.getElementById('tbodyFullAlerts').innerHTML = tbody.innerHTML;
+    }
+
+    function renderCaseTransactions() {
+      const tbody = document.getElementById('tbodyCaseTransactions');
+      tbody.innerHTML = '';
+      document.getElementById('txnCountBadge').innerText = activeCase.transactions.length;
+
+      activeCase.transactions.forEach((tx, idx) => {
+        const tr = document.createElement('tr');
+        tr.id = `rowTxn_${tx.id}`;
+        tr.innerHTML = `
+          <td><input type="checkbox" class="chk-txn" data-txid="${tx.id}" onchange="toggleSelectTxn('${tx.id}')"></td>
+          <td class="mono" style="font-weight:600; color:var(--primary-blue); cursor:pointer;" onclick="openSidePanel('${tx.id}')">${tx.id}</td>
+          <td style="font-size:12px; color:var(--text-secondary);">${tx.date}</td>
+          <td class="mono">${tx.from}</td>
+          <td><span class="badge ${tx.dir === 'INCOMING' ? 'badge-low' : 'badge-med'}">${tx.dir}</span></td>
+          <td class="mono">${tx.to}</td>
+          <td><b>${tx.amount}</b></td>
+          <td style="font-size:11.5px; color:var(--text-secondary);">${tx.type}</td>
+          <td><span class="badge ${tx.risk === 'HIGH' ? 'badge-high' : 'badge-low'}">${tx.risk}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function toggleSelectTxn(txId) {
+      if (selectedTxns.has(txId)) {
+        selectedTxns.delete(txId);
+        document.getElementById(`rowTxn_${txId}`).classList.remove('selected');
+      } else {
+        selectedTxns.add(txId);
+        document.getElementById(`rowTxn_${txId}`).classList.add('selected');
+      }
+      updateStickyBar();
+    }
+
+    function updateStickyBar() {
+      const bar = document.getElementById('stickyEvidenceBar');
+      const countLbl = document.getElementById('lblSelectedTxnCount');
+      countLbl.innerText = selectedTxns.size;
+      if (selectedTxns.size > 0) {
+        bar.classList.add('show');
+      } else {
+        bar.classList.remove('show');
+      }
+    }
+
+    function clearSelectedTxns() {
+      selectedTxns.clear();
+      document.querySelectorAll('.chk-txn').forEach(c => c.checked = false);
+      document.querySelectorAll('#tbodyCaseTransactions tr').forEach(r => r.classList.remove('selected'));
+      updateStickyBar();
+    }
+
+    document.getElementById('chkSelectAllTxns').addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      activeCase.transactions.forEach(t => {
+        if (checked) selectedTxns.add(t.id);
+        else selectedTxns.delete(t.id);
+      });
+      document.querySelectorAll('.chk-txn').forEach(c => c.checked = checked);
+      document.querySelectorAll('#tbodyCaseTransactions tr').forEach(r => r.classList.toggle('selected', checked));
+      updateStickyBar();
+    });
+
+    document.getElementById('btnAddSelectedToEvidence').addEventListener('click', () => {
+      const addedCount = selectedTxns.size;
+      selectedTxns.forEach(txId => {
+        const txObj = activeCase.transactions.find(t => t.id === txId);
+        if (txObj && !evidenceTxns.find(e => e.id === txId)) {
+          evidenceTxns.push(txObj);
+        }
+      });
+      clearSelectedTxns();
+      updateEvidenceTab();
+      logAuditAction("Evidence Added", activeCase.id, `Added ${addedCount} transaction(s) to evidentiary docket.`);
+      alert(`Successfully added ${addedCount} transaction(s) to the Case Evidence docket.`);
+    });
+
+    function updateEvidenceTab() {
+      document.getElementById('evidenceCounterBadge').innerText = evidenceTxns.length;
+      const tbody = document.getElementById('tbodyEvidenceTxns');
+      tbody.innerHTML = '';
+
+      if (evidenceTxns.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:var(--text-muted); padding:20px;">No transactions added to evidence yet. Select transactions from the Transactions tab.</td></tr>`;
+        return;
+      }
+
+      evidenceTxns.forEach((e, idx) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="mono" style="font-weight:600;">${e.id}</td>
+          <td style="font-size:12px;">${e.date}</td>
+          <td class="mono">${e.from} &rarr; ${e.to}</td>
+          <td><b>${e.amount}</b></td>
+          <td><button class="btn btn-secondary btn-sm" onclick="removeEvidenceItem('${e.id}')">Remove</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      updateReportPreview();
+    }
+
+    function removeEvidenceItem(txId) {
+      evidenceTxns = evidenceTxns.filter(e => e.id !== txId);
+      updateEvidenceTab();
+      logAuditAction("Evidence Removed", activeCase.id, `Removed transaction ${txId} from evidence.`);
+    }
+
+    // Side Panel Inspection
+    function openSidePanel(txId) {
+      const tx = activeCase.transactions.find(t => t.id === txId);
+      if (!tx) return;
+
+      document.getElementById('sideDetailTitle').innerText = `Transaction ${tx.id}`;
+      const body = document.getElementById('sideDetailBody');
+      body.innerHTML = `
+        <div style="display:flex; flex-direction:column; gap:12px;">
+          <div style="background:var(--surface-secondary); padding:12px; border-radius:var(--radius-sm); border:1px solid var(--border-subtle);">
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase;">Transaction Amount</div>
+            <div style="font-size:20px; font-weight:700; color:var(--text-primary); margin-top:2px;">${tx.amount}</div>
+            <div style="margin-top:6px;"><span class="badge ${tx.risk === 'HIGH' ? 'badge-high' : 'badge-low'}">${tx.risk} RISK CONVICTION</span></div>
+          </div>
+
+          <div style="font-size:12.5px; display:flex; flex-direction:column; gap:6px;">
+            <div>Timestamp: <b>${tx.date}</b></div>
+            <div>Source Account: <b class="mono">${tx.from}</b></div>
+            <div>Destination: <b class="mono">${tx.to}</b></div>
+            <div>Direction: <b>${tx.dir}</b></div>
+            <div>Payment Rail: <b>${tx.type}</b></div>
+          </div>
+
+          <div style="border-top:1px solid var(--border-subtle); padding-top:12px; margin-top:6px;">
+            <div style="font-weight:600; font-size:12.5px; margin-bottom:6px;">Transaction Context</div>
+            <p style="font-size:12px; color:var(--text-secondary); line-height:1.5;">
+              This transfer occurs along a high-attribution message-passing edge identified by GNNExplainer. 
+              The funds were disbursed rapidly following multi-source deposits into the originating node.
+            </p>
+          </div>
+
+          <div style="margin-top:10px;">
+            <button class="btn btn-primary btn-sm" style="width:100%;" onclick="toggleSelectTxn('${tx.id}'); document.getElementById('btnAddSelectedToEvidence').click(); closeSidePanel();">
+              Add to Case Evidence
+            </button>
+          </div>
+        </div>
+      `;
+      document.getElementById('sideDetailPanel').classList.add('open');
+      logAuditAction("Transaction Inspected", activeCase.id, `Inspected detailed metadata for ${tx.id}.`);
+    }
+
+    function closeSidePanel() {
+      document.getElementById('sideDetailPanel').classList.remove('open');
+    }
+
+    // Network Canvas Visualization
+    function initCanvas() {
+      canvas = document.getElementById('investigationCanvas');
+      if (!canvas) return;
+      ctx = canvas.getContext('2d');
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.scale(dpr, dpr);
+      renderCanvas();
+    }
+
+    function renderCanvas() {
+      if (!ctx || !canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width;
+      const h = rect.height;
+
+      ctx.save();
+      ctx.clearRect(0, 0, w, h);
+      ctx.translate(panX, panY);
+      ctx.scale(scale, scale);
+
+      // Draw Edges
+      activeCase.edges.forEach(e => {
+        const s = activeCase.nodes.find(n => n.id === e.from);
+        const t = activeCase.nodes.find(n => n.id === e.to);
+        if (!s || !t) return;
+
+        const isPathEdge = highlightedPath && highlightedPath.find(p => p.from === e.from && p.to === e.to);
+
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(t.x, t.y);
+
+        if (isPathEdge) {
+          ctx.strokeStyle = '#2457C5';
+          ctx.lineWidth = 4;
+        } else if (e.isDecisive) {
+          ctx.strokeStyle = '#D92D20';
+          ctx.lineWidth = 2.5;
+        } else {
+          ctx.strokeStyle = '#D1D5DB';
+          ctx.lineWidth = 1.5;
+        }
+        ctx.stroke();
+
+        // Arrow
+        const angle = Math.atan2(t.y - s.y, t.x - s.x);
+        const dist = 18;
+        const ax = t.x - Math.cos(angle) * dist;
+        const ay = t.y - Math.sin(angle) * dist;
+
+        ctx.save();
+        ctx.translate(ax, ay);
+        ctx.rotate(angle);
+        ctx.fillStyle = isPathEdge ? '#2457C5' : (e.isDecisive ? '#D92D20' : '#9CA3AF');
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(-7, -4);
+        ctx.lineTo(-7, 4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+
+        // Edge label (amount)
+        const midX = (s.x + t.x) / 2;
+        const midY = (s.y + t.y) / 2;
+        ctx.font = '10px JetBrains Mono';
+        ctx.fillStyle = isPathEdge ? '#17202A' : '#6B7280';
+        ctx.textAlign = 'center';
+        ctx.fillText(e.label, midX, midY - 5);
+      });
+
+      // Draw Nodes
+      activeCase.nodes.forEach(n => {
+        const isTarget = n.id === activeCase.node_id;
+
+        // Outer circle for subject
+        if (isTarget) {
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, 22, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(36, 87, 197, 0.12)';
+          ctx.fill();
+          ctx.strokeStyle = '#2457C5';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, isTarget ? 15 : 11, 0, Math.PI * 2);
+
+        if (isTarget) {
+          ctx.fillStyle = '#2457C5';
+        } else if (n.risk === 'HIGH') {
+          ctx.fillStyle = '#D92D20';
+        } else if (n.role.includes('Hub') || n.role.includes('Relay')) {
+          ctx.fillStyle = '#DC9A00';
+        } else {
+          ctx.fillStyle = '#159455';
+        }
+        ctx.fill();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Node Label
+        ctx.font = isTarget ? 'bold 11px JetBrains Mono' : '10px JetBrains Mono';
+        ctx.fillStyle = isTarget ? '#17202A' : '#4B5563';
+        ctx.textAlign = 'center';
+        const shortKey = n.key.includes('-') ? n.key.split('-')[1] : n.key;
+        ctx.fillText(shortKey, n.x, n.y + (isTarget ? 26 : 20));
+      });
+
+      ctx.restore();
+    }
+
+    // Canvas Interactions
+    window.addEventListener('DOMContentLoaded', () => {
+      canvas = document.getElementById('investigationCanvas');
+      if (canvas) {
+        canvas.addEventListener('mousedown', e => {
+          isDragging = true;
+          startX = e.clientX - panX;
+          startY = e.clientY - panY;
+        });
+        window.addEventListener('mouseup', () => isDragging = false);
+        canvas.addEventListener('mousemove', e => {
+          if (isDragging) {
+            panX = e.clientX - startX;
+            panY = e.clientY - startY;
+            renderCanvas();
+          }
+        });
+        canvas.addEventListener('wheel', e => {
+          e.preventDefault();
+          const factor = e.deltaY < 0 ? 1.1 : 0.9;
+          scale = Math.min(Math.max(scale * factor, 0.6), 2.2);
+          renderCanvas();
+        });
+      }
+
+      document.getElementById('btnZoomIn').addEventListener('click', () => { scale = Math.min(scale * 1.2, 2.2); renderCanvas(); });
+      document.getElementById('btnZoomOut').addEventListener('click', () => { scale = Math.max(scale * 0.8, 0.6); renderCanvas(); });
+      document.getElementById('btnFitGraph').addEventListener('click', () => { scale = 1.0; panX = 0; panY = 0; highlightedPath = null; renderCanvas(); });
+    });
+
+    // Trace Funds Tool
+    function populateTraceDropdowns() {
+      const selS = document.getElementById('selTraceSource');
+      const selT = document.getElementById('selTraceTarget');
+      selS.innerHTML = '';
+      selT.innerHTML = '';
+
+      activeCase.nodes.forEach(n => {
+        const opt1 = document.createElement('option');
+        opt1.value = n.id;
+        opt1.innerText = `${n.key} (${n.role})`;
+        selS.appendChild(opt1);
+
+        const opt2 = document.createElement('option');
+        opt2.value = n.id;
+        opt2.innerText = `${n.key} (${n.role})`;
+        if (n.id === activeCase.node_id) opt2.selected = true;
+        selT.appendChild(opt2);
+      });
+
+      executeTrace();
+    }
+
+    document.getElementById('btnExecuteTrace').addEventListener('click', executeTrace);
+
+    function executeTrace() {
+      const sId = parseInt(document.getElementById('selTraceSource').value);
+      const tId = parseInt(document.getElementById('selTraceTarget').value);
+
+      const pathBox = document.getElementById('tracePathDetails');
+      pathBox.innerHTML = '';
+
+      if (sId === tId) {
+        pathBox.innerHTML = `<div>Source and destination accounts are identical.</div>`;
+        highlightedPath = null;
+        renderCanvas();
+        return;
+      }
+
+      // BFS to find path
+      const queue = [[sId]];
+      const visited = new Set([sId]);
+      let foundPath = null;
+
+      while (queue.length > 0) {
+        const curPath = queue.shift();
+        const lastNode = curPath[curPath.length - 1];
+
+        if (lastNode === tId) {
+          foundPath = curPath;
+          break;
+        }
+
+        const outgoing = activeCase.edges.filter(e => e.from === lastNode);
+        for (const e of outgoing) {
+          if (!visited.has(e.to)) {
+            visited.add(e.to);
+            queue.push([...curPath, e.to]);
+          }
+        }
+      }
+
+      if (foundPath) {
+        highlightedPath = [];
+        let totalVal = 0;
+        let flowHtml = '';
+
+        for (let i = 0; i < foundPath.length; i++) {
+          const nObj = activeCase.nodes.find(n => n.id === foundPath[i]);
+          flowHtml += `<div class="path-step-node">\u2022 ${nObj.key} <span style="font-size:10px; color:var(--text-muted);">(${nObj.role})</span></div>`;
+
+          if (i < foundPath.length - 1) {
+            const edge = activeCase.edges.find(e => e.from === foundPath[i] && e.to === foundPath[i+1]);
+            const amtLabel = edge ? edge.label : 'Transfer';
+            totalVal += (edge ? edge.amount : 0);
+            highlightedPath.push({ from: foundPath[i], to: foundPath[i+1] });
+            flowHtml += `<div class="path-step-arrow">&darr; ${amtLabel}</div>`;
+          }
+        }
+
+        pathBox.innerHTML = flowHtml;
+        document.getElementById('traceResultSummary').innerText = `${foundPath.length - 1}-hop transaction conduit identified`;
+        document.getElementById('tracePathMetrics').innerText = `Observed Conduits: ${foundPath.length - 1} \u2022 Value: $${totalVal.toLocaleString()}`;
+        renderCanvas();
+        logAuditAction("Funds Traced", activeCase.id, `Traced funds from Node ${sId} to Node ${tId} (${foundPath.length - 1} hops).`);
+      } else {
+        pathBox.innerHTML = `<div style="color:var(--text-muted);">No direct transaction path between selected entities within 3-hop graph.</div>`;
+        highlightedPath = null;
+        renderCanvas();
+      }
+    }
+
+    function renderMiniExplainer() {
+      const box = document.getElementById('miniExplainerTable');
+      box.innerHTML = '';
+      activeCase.edges.slice(0, 3).forEach(e => {
+        const s = activeCase.nodes.find(n => n.id === e.from);
+        const t = activeCase.nodes.find(n => n.id === e.to);
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid var(--border-subtle);';
+        row.innerHTML = `
+          <span>${s ? s.key.slice(-9) : e.from} &rarr; ${t ? t.key.slice(-9) : e.to}</span>
+          <span style="font-weight:700; color:${e.isDecisive ? 'var(--risk-high)' : 'var(--primary-blue)'};">${(e.importance * 100).toFixed(1)}% influence</span>
+        `;
+        box.appendChild(row);
+      });
+    }
+
+    function toggleTechAccordion() {
+      const body = document.getElementById('techAccordionBody');
+      const arrow = document.getElementById('techAccordionArrow');
+      const isOpen = body.style.display === 'block';
+      body.style.display = isOpen ? 'none' : 'block';
+      arrow.innerHTML = isOpen ? '&#9656;' : '&#9662;';
+    }
+
+    // Notes Saving
+    document.getElementById('btnSaveInvestigatorNote').addEventListener('click', () => {
+      const text = document.getElementById('investigatorNotesArea').value;
+      const ts = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('noteSavedTimestamp').innerText = `Last saved: Today at ${ts} by Investigator Harish GG`;
+      updateReportPreview();
+      logAuditAction("Note Saved", activeCase.id, `Updated case investigation narrative notes.`);
+      alert("Investigator note saved to compliance case file.");
+    });
+
+    // Report Updating
+    function updateReportPreview() {
+      document.getElementById('repCaseId').innerText = activeCase.id;
+      document.getElementById('repTrackingCode').innerText = `SAR-2026-${activeCase.id.slice(-5)}`;
+      document.getElementById('repAccountKey').innerText = activeCase.account_key;
+      document.getElementById('repNodeId').innerText = activeCase.node_id;
+      document.getElementById('repRiskScore').innerText = `${(activeCase.risk_score * 100).toFixed(1)}% (${activeCase.risk_level} RISK)`;
+      document.getElementById('repSummaryText').innerText = activeCase.summary;
+      document.getElementById('repStatus').innerText = activeCase.status;
+
+      const userNote = document.getElementById('investigatorNotesArea').value.trim();
+      document.getElementById('repNotesDisplay').innerText = userNote ? `"${userNote}"` : `"The observed multi-hop transaction sequence warrants enhanced regulatory filing. Account participants appear organized around pass-through funnel nodes."`;
+
+      // Evidentiary txns in report
+      const repTbody = document.getElementById('repTxnTbody');
+      repTbody.innerHTML = '';
+      const list = evidenceTxns.length > 0 ? evidenceTxns : activeCase.transactions.slice(0, 3);
+      list.forEach(tx => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="mono">${tx.id}</td>
+          <td>${tx.date}</td>
+          <td class="mono">${tx.from} &rarr; ${tx.to}</td>
+          <td><b>${tx.amount}</b></td>
+        `;
+        repTbody.appendChild(tr);
+      });
+    }
+
+    // Escalation Modal
+    document.getElementById('btnOpenEscalateModal').addEventListener('click', () => {
+      document.getElementById('modalEscalate').classList.add('open');
+    });
+
+    function closeEscalateModal() {
+      document.getElementById('modalEscalate').classList.remove('open');
+    }
+
+    document.getElementById('btnConfirmEscalate').addEventListener('click', () => {
+      activeCase.status = "ESCALATED";
+      document.getElementById('activeCaseStatusBadge').className = 'badge-status badge-escalated';
+      document.getElementById('activeCaseStatusBadge').innerText = '\u25CF ESCALATED';
+      document.getElementById('repStatus').innerText = 'ESCALATED';
+
+      const reason = document.getElementById('modalEscalateReason').value;
+      logAuditAction("Case Escalated", activeCase.id, `Case escalated to FIU with reason: ${reason}.`);
+      closeEscalateModal();
+      alert(`Case ${activeCase.id} has been formally escalated to Tier-3 Compliance Review.`);
+      renderOverviewAlerts();
+    });
+
+    function closeCase() {
+      activeCase.status = "CLOSED";
+      document.getElementById('activeCaseStatusBadge').className = 'badge-status badge-closed';
+      document.getElementById('activeCaseStatusBadge').innerText = '\u25CF CLOSED';
+      document.getElementById('repStatus').innerText = 'CLOSED';
+      logAuditAction("Case Closed", activeCase.id, `Case closed with finding: No Further Action.`);
+      renderOverviewAlerts();
+      alert(`Case ${activeCase.id} closed.`);
+    }
+
+    // Audit Logging
+    function logAuditAction(actionType, caseId, desc) {
+      const now = new Date();
+      const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      ENTERPRISE_DATA.auditLog.unshift({
+        time: timeStr,
+        user: "Harish GG",
+        type: actionType,
+        caseId: caseId,
+        desc: desc
+      });
+      renderAuditLog();
+    }
+
+    function renderAuditLog() {
+      const tbody = document.getElementById('tbodyAuditLog');
+      tbody.innerHTML = '';
+      ENTERPRISE_DATA.auditLog.forEach(a => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="mono" style="font-size:12px; color:var(--text-muted);">${a.time}</td>
+          <td><b>${a.user}</b></td>
+          <td><span class="badge badge-status badge-open" style="font-size:10.5px;">${a.type}</span></td>
+          <td class="mono" style="color:var(--primary-blue);">${a.caseId}</td>
+          <td style="color:var(--text-secondary);">${a.desc}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Customers Table
+    function renderCustomersDirectory() {
+      const tbody = document.getElementById('tbodyCustomersList');
+      tbody.innerHTML = '';
+
+      Object.keys(ENTERPRISE_DATA.cases).forEach(k => {
+        const c = ENTERPRISE_DATA.cases[k];
+        const isHigh = c.risk_level === 'HIGH';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="mono" style="font-weight:600; color:var(--primary-blue);">${c.account_key}</td>
+          <td>BANK-${c.account_key.split('-')[0]}</td>
+          <td><span class="badge ${isHigh ? 'badge-high' : 'badge-low'}">${c.risk_level}</span></td>
+          <td class="mono"><b>${(c.risk_score * 100).toFixed(1)}%</b></td>
+          <td>${c.counterparties} counterparty nodes</td>
+          <td><span class="badge-status badge-${c.status.toLowerCase().replace(' ', '-')}">\u25CF ${c.status}</span></td>
+          <td><button class="btn btn-secondary btn-sm" onclick="loadCase('${k}'); switchView('case');">View Profile</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // All Transactions Table
+    function renderAllTransactions() {
+      const tbody = document.getElementById('tbodyAllTransactions');
+      tbody.innerHTML = '';
+
+      Object.keys(ENTERPRISE_DATA.cases).forEach(k => {
+        const c = ENTERPRISE_DATA.cases[k];
+        c.transactions.forEach(t => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="mono" style="font-weight:600; color:var(--primary-blue); cursor:pointer;" onclick="openSidePanel('${t.id}')">${t.id}</td>
+            <td style="font-size:12px; color:var(--text-secondary);">${t.date}</td>
+            <td class="mono">${t.from}</td>
+            <td><span class="badge ${t.dir === 'INCOMING' ? 'badge-low' : 'badge-med'}">${t.dir}</span></td>
+            <td class="mono">${t.to}</td>
+            <td><b>${t.amount}</b></td>
+            <td><span class="badge ${t.risk === 'HIGH' ? 'badge-high' : 'badge-low'}">${t.risk}</span></td>
+            <td><button class="btn btn-secondary btn-sm" onclick="openSidePanel('${t.id}')">Inspect</button></td>
+          `;
+          tbody.appendChild(tr);
+        });
+      });
+    }
+
+    function togglePresentationMode() {
+      presentationMode = !presentationMode;
+      document.body.classList.toggle('presentation-mode', presentationMode);
+      const btn = document.getElementById('btnTogglePresentation');
+      btn.innerText = presentationMode ? 'Exit Presentation' : 'Presentation Mode';
+      setTimeout(initCanvas, 50);
+    }
+
+    // Initialize Application
+    window.addEventListener('DOMContentLoaded', () => {
+      initNav();
+      renderOverviewAlerts();
+      renderAuditLog();
+      renderCustomersDirectory();
+      renderAllTransactions();
+      loadCase('case1');
+    });
+  </script>
 </body>
 </html>
