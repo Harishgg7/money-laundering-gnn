@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { NetworkNode } from '../../types';
 import { RiskBadge } from '../common/RiskBadge';
 import { ArrowUpRight, X, Focus } from 'lucide-react';
+import { formatAmount } from '../../utils/formatters';
 
 interface AccountPanelProps {
   node: NetworkNode | null;
@@ -14,12 +15,6 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({ node, onClose, onCen
   const navigate = useNavigate();
 
   if (!node) return null;
-
-  const formatCurrency = (val: number) => {
-    if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
-    if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
-    return `$${val.toLocaleString()}`;
-  };
 
   const handleInvestigate = () => {
     // Navigate dynamically to the account's investigation dossier (no hardcoded case ID mapping)
@@ -103,7 +98,7 @@ export const AccountPanel: React.FC<AccountPanelProps> = ({ node, onClose, onCen
         <div style={{ padding: 8, backgroundColor: 'var(--bg-surface-subtle)', borderRadius: 'var(--radius-xs)' }}>
           <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Total Volume</div>
           <div className="mono tabular" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)', marginTop: 4 }}>
-            {formatCurrency(node.totalVolume)}
+            {formatAmount(node.totalVolume)}
           </div>
         </div>
 

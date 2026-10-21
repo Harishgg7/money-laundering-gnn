@@ -36,6 +36,7 @@ import json
 import urllib.request
 import urllib.error
 import subprocess
+from pathlib import Path
 
 BASE_URL = "http://localhost:8000"
 
@@ -375,19 +376,35 @@ def run_matrix():
 
     # 24. Compliance terminology audit
     try:
+        root_dir = Path(__file__).resolve().parent
+        src_dir = root_dir / "frontend" / "src"
+        static_dir = root_dir / "static"
+        assert src_dir.exists() and src_dir.is_dir(), f"Target directory does not exist: {src_dir}"
+        assert static_dir.exists() and static_dir.is_dir(), f"Target directory does not exist: {static_dir}"
+
         prohibited = ["conviction score", "conviction", "guilty", "confirmed fraud", "confirmed money laundering"]
         found = []
-        for sdir in ["frontend/src", "backend"]:
-            for root, _, files in os.walk(sdir):
+        files_to_scan = []
+
+        for target_dir in [src_dir, static_dir]:
+            for root, _, files in os.walk(target_dir):
                 for f in files:
-                    if f.endswith((".ts", ".tsx", ".py", ".json")) and not f.endswith(("test_phase3_1_matrix.py", "test_phase3_2_matrix.py", "test_phase4_final_matrix.py")):
-                        path = os.path.join(root, f)
-                        with open(path, "r", encoding="utf-8", errors="ignore") as fp:
-                            for lno, line in enumerate(fp, 1):
-                                lower = line.lower()
-                                for p in prohibited:
-                                    if p in lower:
-                                        found.append((path, lno, p))
+                    if f.endswith((".ts", ".tsx", ".js", ".html", ".json", ".py")):
+                        files_to_scan.append(Path(root) / f)
+
+        # Root-level non-test Python files
+        for py_file in root_dir.glob("*.py"):
+            if not py_file.name.startswith("test_"):
+                files_to_scan.append(py_file)
+
+        for path in files_to_scan:
+            with open(path, "r", encoding="utf-8", errors="ignore") as fp:
+                for lno, line in enumerate(fp, 1):
+                    lower = line.lower()
+                    for p in prohibited:
+                        if p in lower:
+                            found.append((str(path), lno, p))
+
         assert len(found) == 0, f"Found prohibited terms: {found}"
         print(f"[PASS] Test 24: Compliance terminology audit            | Zero prohibited terms across all production code", flush=True)
         passed += 1
@@ -396,13 +413,16 @@ def run_matrix():
 
     # 25. Frozen ML pipeline invariance
     try:
-        ckpt_path = "checkpoints/best_model.pt"
-        graph_path = "data/processed/aml_graph.pt"
-        assert os.path.exists(ckpt_path), "Missing model checkpoint"
-        assert os.path.exists(graph_path), "Missing aml_graph.pt"
-        assert os.path.getsize(ckpt_path) == 511330
-        assert os.path.getsize(graph_path) == 68962330
-        with open("outputs/enriched_cases.json", "r", encoding="utf-8") as f:
+        root_dir = Path(__file__).resolve().parent
+        ckpt_path = root_dir / "checkpoints" / "best_model.pt"
+        graph_path = root_dir / "data" / "processed" / "aml_graph.pt"
+        cases_path = root_dir / "outputs" / "enriched_cases.json"
+
+        assert ckpt_path.exists(), f"Missing model checkpoint: {ckpt_path}"
+        assert graph_path.exists(), f"Missing aml_graph.pt: {graph_path}"
+        assert ckpt_path.stat().st_size == 511330
+        assert graph_path.stat().st_size == 68962330
+        with open(cases_path, "r", encoding="utf-8") as f:
             cases = json.load(f)
             threshold = cases.get("meta", {}).get("threshold") or cases.get("metadata", {}).get("threshold")
             assert threshold == 0.3781
@@ -413,9 +433,13 @@ def run_matrix():
 
     # 26. TypeScript and Vite production build
     try:
+        root_dir = Path(__file__).resolve().parent
+        frontend_dir = root_dir / "frontend"
+        assert frontend_dir.exists(), f"Missing frontend directory: {frontend_dir}"
+
         res_tsc = subprocess.run(
             ["node", "node_modules/typescript/bin/tsc", "-b"],
-            cwd="frontend",
+            cwd=str(frontend_dir),
             capture_output=True,
             text=True
         )
@@ -423,7 +447,7 @@ def run_matrix():
 
         res_vite = subprocess.run(
             ["node", "node_modules/vite/bin/vite.js", "build"],
-            cwd="frontend",
+            cwd=str(frontend_dir),
             capture_output=True,
             text=True
         )

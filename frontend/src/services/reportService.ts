@@ -102,8 +102,10 @@ export const reportService = {
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 0);
     return { success: true, filename };
   },
 

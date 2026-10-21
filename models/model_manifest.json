@@ -32,13 +32,6 @@
       "precision_mean": 0.7304,
       "recall_mean": 0.3669
     },
-    "temporal_validation": {
-      "pr_auc_temporal": 0.5493,
-      "roc_auc_temporal": 0.9063,
-      "f1_temporal": 0.5582,
-      "precision_temporal": 0.8098,
-      "recall_temporal": 0.4259
-    },
     "artifacts": {
       "gnn_encoder": {
         "path": "models/gnn_encoder.pt",

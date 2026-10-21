@@ -107,10 +107,13 @@ LAYMAN_TEMPLATES = {
 }
 
 
+BASE_DIR = Path(__file__).resolve().parent
+OUTPUTS_DIR = BASE_DIR / "outputs"
+
 def build_cases():
     service = TraceService()
-    os.makedirs("outputs", exist_ok=True)
-    out_path = os.path.join("outputs", "enriched_cases.json")
+    OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
+    out_path = OUTPUTS_DIR / "enriched_cases.json"
 
     if service.data is None:
         print("[TRACE] Raw PyG graph not mounted; preserving existing cached cases.")
@@ -131,6 +134,12 @@ def build_cases():
     tp_sorted = tp_nodes[np.argsort(-service.gnn_probs[tp_nodes].cpu().numpy())]
 
     # Select Curated Candidates
+    min_required_tp = 12
+    if len(tp_sorted) < min_required_tp:
+        raise ValueError(
+            f"Insufficient true-positive candidate nodes in test split: found {len(tp_sorted)}, required at least {min_required_tp}."
+        )
+
     candidate_indices = [
         int(tp_sorted[0]),   # Case 01: Top illicit hub (Node 191055 / 802EA4FC0)
         int(tp_sorted[3]),   # Case 02: Classic Smurfing hub (Node 233813 / 8039155C0)
@@ -163,7 +172,9 @@ def build_cases():
     for defn in case_definitions:
         k = defn["key"]
         nid = defn["node"]
-        tmpl = LAYMAN_TEMPLATES[defn["template"]]
+        tmpl = dict(LAYMAN_TEMPLATES[defn["template"]])
+        tmpl["is_illustrative_narrative"] = True
+        tmpl["note"] = "Illustrative narrative typology; specific quantitative metrics derived from model score and graph topology."
         cid = defn["case_id"]
 
         print(f"[TRACE] Generating enriched dossier for {k} (Node {nid})...")
@@ -179,6 +190,12 @@ def build_cases():
         sub_edges = dossier.get("subgraph", {}).get("edges", [])
         tot_vol = sum(e.get("amount", 12000) for e in sub_edges) if sub_edges else 145000
         dossier["volume_est"] = round(tot_vol, 2)
+        dossier["briefing_metrics"] = {
+            "gnn_score": dossier.get("gnn_score", 0.0),
+            "mlp_score": dossier.get("mlp_score", 0.0),
+            "subgraph_edges": len(sub_edges),
+            "volume_est": dossier["volume_est"]
+        }
 
         cases_dict[k] = dossier
 
@@ -189,7 +206,7 @@ def build_cases():
         for e in sub_edges:
             all_multi_edges.append(e)
 
-    # Add cross-ring bridge edges between case hubs to visualize interconnected rings
+    # Add cross-ring bridge edges between case hubs — explicitly marked as visual connectors rather than real transactions
     hub_nodes = [defn["node"] for defn in case_definitions if defn["template"] != "cleared"]
     for i in range(len(hub_nodes) - 1):
         u = hub_nodes[i]
@@ -199,9 +216,12 @@ def build_cases():
             "target": v,
             "source_label": service.format_account_id(u),
             "target_label": service.format_account_id(v),
-            "importance": 0.72,
-            "amount": 48500.0,
-            "is_inter_ring": True
+            "importance": 0.0,
+            "amount": 0.0,
+            "is_inter_ring": True,
+            "is_visual_connector": True,
+            "is_transaction": False,
+            "connector_type": "visual_cluster_link"
         })
 
     multi_ring_network = {

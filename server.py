@@ -10,27 +10,35 @@ import re
 import json
 import mimetypes
 import subprocess
+import threading
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote
 
-# Ensure execution with the project's Python environment (.venv or Python 3.12)
+# Ensure execution with the project's Python environment (.venv or venv)
 def _ensure_venv():
+    if os.environ.get("TRACE_VENV_GUARD") == "1":
+        return
     try:
         import numpy
         import torch
     except ImportError:
         root = Path(__file__).resolve().parent
+        current_py = Path(sys.executable).resolve()
         candidates = [
             root / ".venv" / "Scripts" / "python.exe",
+            root / ".venv" / "bin" / "python",
             root / "venv" / "Scripts" / "python.exe",
-            Path(r"C:\Users\harish\AppData\Local\Programs\Python\Python312\python.exe")
+            root / "venv" / "bin" / "python",
         ]
+        env = os.environ.copy()
+        env["TRACE_VENV_GUARD"] = "1"
         for py in candidates:
-            if py.exists():
+            if py.exists() and py.resolve() != current_py:
                 print(f"[*] Switching to Python environment: {py}")
-                res = subprocess.run([str(py), str(Path(__file__).resolve())] + sys.argv[1:])
+                res = subprocess.run([str(py), str(Path(__file__).resolve())] + sys.argv[1:], env=env)
                 sys.exit(res.returncode)
 
 _ensure_venv()
@@ -39,15 +47,29 @@ from trace_service import TraceService
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(ROOT_DIR, "static")
 REPORTS_FILE = os.path.join(ROOT_DIR, "outputs", "reports_registry.json")
 SERVICE = None
+SERVICE_LOCK = threading.Lock()
+REPORTS_LOCK = threading.Lock()
 
 
 def get_service() -> TraceService:
     global SERVICE
     if SERVICE is None:
-        SERVICE = TraceService()
+        with SERVICE_LOCK:
+            if SERVICE is None:
+                SERVICE = TraceService()
     return SERVICE
+
+
+def _save_reports_atomic(reports_data: list):
+    dir_name = os.path.dirname(REPORTS_FILE)
+    os.makedirs(dir_name, exist_ok=True)
+    with tempfile.NamedTemporaryFile("w", dir=dir_name, delete=False, encoding="utf-8") as tf:
+        json.dump(reports_data, tf, indent=2)
+        temp_name = tf.name
+    os.replace(temp_name, REPORTS_FILE)
 
 
 def sanitize_terminology(obj):
@@ -87,7 +109,7 @@ VALID_DECISIONS = {
 
 class TraceHTTPHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=ROOT_DIR, **kwargs)
+        super().__init__(*args, directory=STATIC_DIR, **kwargs)
 
     def _send_json(self, status_code: int, payload: any):
         body = json.dumps(payload).encode("utf-8")
@@ -410,7 +432,7 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
 
         # Static assets
         if path in ("/", "/index.html"):
-            self.path = "/static/index.html"
+            self.path = "/index.html"
             return super().do_GET()
 
         return super().do_GET()
@@ -436,71 +458,71 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
                 self._send_json(400, {"error": "Request body must be a valid non-empty JSON object."})
                 return
 
-            decision = body.get("decision", "Continue Surveillance")
-            if decision and decision not in VALID_DECISIONS:
+            decision = body.get("decision")
+            if decision is not None and decision not in VALID_DECISIONS:
                 self._send_json(400, {
                     "error": f"Invalid decision '{decision}'. Allowed: {sorted(list(VALID_DECISIONS))}"
                 })
                 return
 
-            reports = []
-            if os.path.exists(REPORTS_FILE):
-                try:
-                    with open(REPORTS_FILE, "r", encoding="utf-8") as f:
-                        reports = json.load(f)
-                except Exception:
-                    reports = []
+            with REPORTS_LOCK:
+                reports = []
+                if os.path.exists(REPORTS_FILE):
+                    try:
+                        with open(REPORTS_FILE, "r", encoding="utf-8") as f:
+                            reports = json.load(f)
+                    except Exception:
+                        reports = []
 
-            req_id = body.get("id")
-            existing_idx = None
-            if req_id:
-                for idx, r in enumerate(reports):
-                    if r.get("id") == req_id:
-                        existing_idx = idx
-                        break
+                req_id = body.get("id")
+                existing_idx = None
+                if req_id:
+                    for idx, r in enumerate(reports):
+                        if r.get("id") == req_id:
+                            existing_idx = idx
+                            break
 
-            if existing_idx is not None:
-                # Update existing report in persistence
-                r = reports[existing_idx]
-                r["decision"] = decision
-                if "notes" in body:
-                    r["notes"] = body.get("notes", "")
-                if "summary" in body:
-                    r["summary"] = body.get("summary", "")
-                if "status" in body:
-                    r["status"] = body.get("status", r.get("status", "Filed"))
-                if "riskLevel" in body:
-                    r["riskLevel"] = body.get("riskLevel", r.get("riskLevel", "MEDIUM"))
-                r["updatedAt"] = datetime.now().isoformat() + "Z"
-                reports[existing_idx] = r
-                saved_report = r
-                status_code = 200
-            else:
-                # Generate deterministic new report ID
-                new_rep_id = f"REP-2026-00{len(reports) + 42}"
-                new_report = {
-                    "id": new_rep_id,
-                    "caseId": body.get("caseId", "CASE-2026-0000"),
-                    "accountId": body.get("accountId", "UNKNOWN"),
-                    "riskLevel": body.get("riskLevel", "MEDIUM"),
-                    "decision": decision,
-                    "status": "Filed",
-                    "filedDate": datetime.now().strftime("%Y-%m-%d"),
-                    "investigatorName": body.get("investigatorName", "Harish GG (Lead AML Investigator)"),
-                    "summary": body.get("summary", ""),
-                    "observedPattern": body.get("observedPattern", ""),
-                    "evidence": body.get("evidence", {}),
-                    "modelAssessment": body.get("modelAssessment", {}),
-                    "notes": body.get("notes", ""),
-                    "createdAt": datetime.now().isoformat() + "Z",
-                }
-                reports.insert(0, new_report)
-                saved_report = new_report
-                status_code = 201
+                if existing_idx is not None:
+                    # Update existing report in persistence
+                    r = reports[existing_idx]
+                    if decision:
+                        r["decision"] = decision
+                    if "notes" in body:
+                        r["notes"] = body.get("notes", "")
+                    if "summary" in body:
+                        r["summary"] = body.get("summary", "")
+                    if "status" in body:
+                        r["status"] = body.get("status", r.get("status", "Filed"))
+                    if "riskLevel" in body:
+                        r["riskLevel"] = body.get("riskLevel", r.get("riskLevel", "MEDIUM"))
+                    r["updatedAt"] = datetime.now().isoformat() + "Z"
+                    reports[existing_idx] = r
+                    saved_report = r
+                    status_code = 200
+                else:
+                    # Generate deterministic new report ID
+                    new_rep_id = f"REP-2026-00{len(reports) + 42}"
+                    new_report = {
+                        "id": new_rep_id,
+                        "caseId": body.get("caseId", "CASE-2026-0000"),
+                        "accountId": body.get("accountId", "UNKNOWN"),
+                        "riskLevel": body.get("riskLevel", "MEDIUM"),
+                        "decision": decision or "Continue Surveillance",
+                        "status": "Filed",
+                        "filedDate": datetime.now().strftime("%Y-%m-%d"),
+                        "investigatorName": body.get("investigatorName", "Harish GG (Lead AML Investigator)"),
+                        "summary": body.get("summary", ""),
+                        "observedPattern": body.get("observedPattern", ""),
+                        "evidence": body.get("evidence", {}),
+                        "modelAssessment": body.get("modelAssessment", {}),
+                        "notes": body.get("notes", ""),
+                        "createdAt": datetime.now().isoformat() + "Z",
+                    }
+                    reports.insert(0, new_report)
+                    saved_report = new_report
+                    status_code = 201
 
-            os.makedirs(os.path.dirname(REPORTS_FILE), exist_ok=True)
-            with open(REPORTS_FILE, "w", encoding="utf-8") as f:
-                json.dump(reports, f, indent=2)
+                _save_reports_atomic(reports)
 
             self._send_json(status_code, sanitize_terminology(saved_report))
             return
@@ -625,47 +647,46 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
                 return
 
             decision = body.get("decision")
-            if decision and decision not in VALID_DECISIONS:
+            if decision is not None and decision not in VALID_DECISIONS:
                 self._send_json(400, {
                     "error": f"Invalid decision '{decision}'. Allowed: {sorted(list(VALID_DECISIONS))}"
                 })
                 return
 
-            reports = []
-            if os.path.exists(REPORTS_FILE):
-                try:
-                    with open(REPORTS_FILE, "r", encoding="utf-8") as f:
-                        reports = json.load(f)
-                except Exception:
-                    reports = []
+            with REPORTS_LOCK:
+                reports = []
+                if os.path.exists(REPORTS_FILE):
+                    try:
+                        with open(REPORTS_FILE, "r", encoding="utf-8") as f:
+                            reports = json.load(f)
+                    except Exception:
+                        reports = []
 
-            found_idx = None
-            for idx, r in enumerate(reports):
-                if r.get("id") == rep_id or r.get("caseId") == rep_id:
-                    found_idx = idx
-                    break
+                found_idx = None
+                for idx, r in enumerate(reports):
+                    if r.get("id") == rep_id or r.get("caseId") == rep_id:
+                        found_idx = idx
+                        break
 
-            if found_idx is None:
-                self._send_json(404, {"error": f"Report '{rep_id}' not found."})
-                return
+                if found_idx is None:
+                    self._send_json(404, {"error": f"Report '{rep_id}' not found."})
+                    return
 
-            r = reports[found_idx]
-            if decision:
-                r["decision"] = decision
-            if "notes" in body:
-                r["notes"] = body.get("notes", "")
-            if "summary" in body:
-                r["summary"] = body.get("summary", "")
-            if "status" in body:
-                r["status"] = body.get("status", r.get("status", "Filed"))
-            if "riskLevel" in body:
-                r["riskLevel"] = body.get("riskLevel", r.get("riskLevel", "MEDIUM"))
-            r["updatedAt"] = datetime.now().isoformat() + "Z"
-            reports[found_idx] = r
+                r = reports[found_idx]
+                if decision:
+                    r["decision"] = decision
+                if "notes" in body:
+                    r["notes"] = body.get("notes", "")
+                if "summary" in body:
+                    r["summary"] = body.get("summary", "")
+                if "status" in body:
+                    r["status"] = body.get("status", r.get("status", "Filed"))
+                if "riskLevel" in body:
+                    r["riskLevel"] = body.get("riskLevel", r.get("riskLevel", "MEDIUM"))
+                r["updatedAt"] = datetime.now().isoformat() + "Z"
+                reports[found_idx] = r
 
-            os.makedirs(os.path.dirname(REPORTS_FILE), exist_ok=True)
-            with open(REPORTS_FILE, "w", encoding="utf-8") as f:
-                json.dump(reports, f, indent=2)
+                _save_reports_atomic(reports)
 
             self._send_json(200, sanitize_terminology(r))
             return
@@ -677,7 +698,7 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
         print(f"[TRACE HTTP] {self.address_string()} - {fmt % args}")
 
 
-def start_server(host: str = "0.0.0.0", port: int = 8000):
+def start_server(host: str = "127.0.0.1", port: int = 8000):
     httpd = ThreadingHTTPServer((host, port), TraceHTTPHandler)
     print(f"\n==================================================================")
     print(f"  TRACE — AML Investigation & Financial Crime Intelligence Platform")

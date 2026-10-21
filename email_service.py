@@ -18,6 +18,7 @@ Guarantees honest failure handling with zero fake success states:
 
 import os
 import re
+import ssl
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -140,18 +141,24 @@ solely for compliance and regulatory review purposes. Unauthorized dissemination
 
     # 5. Dispatch via SMTP
     try:
+        tls_context = ssl.create_default_context()
         if cfg["port"] == 465:
-            server = smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=10)
+            server_cm = smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=10, context=tls_context)
         else:
-            server = smtplib.SMTP(cfg["host"], cfg["port"], timeout=10)
-            if cfg["use_tls"]:
-                server.starttls()
+            server_cm = smtplib.SMTP(cfg["host"], cfg["port"], timeout=10)
 
-        if cfg["username"] and cfg["password"]:
-            server.login(cfg["username"], cfg["password"])
+        with server_cm as server:
+            tls_active = (cfg["port"] == 465)
+            if cfg["port"] != 465 and cfg["use_tls"]:
+                server.starttls(context=tls_context)
+                tls_active = True
 
-        server.send_message(msg)
-        server.quit()
+            if cfg["username"] and cfg["password"]:
+                if not tls_active:
+                    raise smtplib.SMTPException("TLS is required before sending credentials over SMTP.")
+                server.login(cfg["username"], cfg["password"])
+
+            server.send_message(msg)
 
         return True, "sent", {
             "success": True,

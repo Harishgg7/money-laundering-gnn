@@ -13,6 +13,17 @@ Adheres strictly to banking compliance documentation standards:
 
 import io
 from datetime import datetime
+from xml.sax.saxutils import escape
+
+def escape_text(val) -> str:
+    if val is None:
+        return ''
+    return escape(str(val))
+
+def escape_multiline(val) -> str:
+    if val is None:
+        return ''
+    return escape(str(val)).replace('\n', '<br/>')
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -204,6 +215,12 @@ def generate_report_pdf(report: dict) -> bytes:
     # 2. Key Metadata Strip (Case ID, Account, Risk Level, Risk Score, Status)
     model_score = report.get("modelAssessment", {}).get("riskScore", 0.0)
     score_pct = f"{model_score * 100:.1f}%" if isinstance(model_score, (int, float)) else "N/A"
+    model_assessment = report.get("modelAssessment", {})
+    raw_thr = model_assessment.get("threshold", 0.3781)
+    try:
+        thr_str = f"{float(raw_thr):.4f}"
+    except (ValueError, TypeError):
+        thr_str = str(raw_thr)
 
     meta_cells = [
         [
@@ -213,10 +230,10 @@ def generate_report_pdf(report: dict) -> bytes:
             Paragraph("MODEL RISK SCORE", style_meta_label),
         ],
         [
-            Paragraph(str(report.get("caseId", "CASE-2026-0000")), style_meta_val),
-            Paragraph(str(report.get("accountId", "UNKNOWN")), style_meta_val),
-            Paragraph(f"<font color='{risk_badge_fg.hexval()}'><b>{risk_level}</b></font>", style_meta_val),
-            Paragraph(f"<b>{score_pct}</b> (Threshold: 0.3781)", style_meta_val),
+            Paragraph(escape_text(report.get("caseId", "CASE-2026-0000")), style_meta_val),
+            Paragraph(escape_text(report.get("accountId", "UNKNOWN")), style_meta_val),
+            Paragraph(f"<font color='{risk_badge_fg.hexval()}'><b>{escape_text(risk_level)}</b></font>", style_meta_val),
+            Paragraph(f"<b>{score_pct}</b> (Threshold: {thr_str})", style_meta_val),
         ]
     ]
     meta_table = Table(meta_cells, colWidths=[126, 126, 126, 126])
@@ -236,7 +253,8 @@ def generate_report_pdf(report: dict) -> bytes:
 
     # 3. Section 1: Investigation Summary
     story.append(Paragraph("1. INVESTIGATION SUMMARY", style_h2))
-    summary_text = report.get("summary") or "Investigation opened on subject account following automated high-risk topological detection in the transaction graph."
+    raw_summary = report.get("summary") or "Investigation opened on subject account following automated high-risk topological detection in the transaction graph."
+    summary_text = escape_multiline(raw_summary)
     summary_table = Table([[Paragraph(summary_text, style_body)]], colWidths=[504])
     summary_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), BG_LIGHT),
@@ -251,29 +269,40 @@ def generate_report_pdf(report: dict) -> bytes:
 
     # 4. Section 2: Observed Transaction Patterns
     story.append(Paragraph("2. OBSERVED TRANSACTION PATTERNS", style_h2))
-    pattern_name = report.get("observedPattern") or "Layering / Rapid Pass-Through"
-    pattern_data = [
-        [
-            Paragraph("<b>Pattern Typology</b>", style_meta_label),
-            Paragraph("<b>Observation Status</b>", style_meta_label),
-            Paragraph("<b>Diagnostic Evidence & Analysis</b>", style_meta_label),
-        ],
-        [
-            Paragraph(f"<b>{pattern_name}</b>", style_body),
-            Paragraph("<font color='#B45309'><b>Observed</b></font>", style_body),
-            Paragraph("Multi-hop fund dispersal within 48 hours of credit. Rapid distribution across counterparties with minimal balance retention.", style_body)
-        ],
-        [
-            Paragraph("Fan-Out / Structuring", style_body),
-            Paragraph("<font color='#64748B'>Possible</font>", style_body),
-            Paragraph("Outbound fund segregation into sub-reporting transaction tranches across neighboring nodes.", style_body)
-        ],
-        [
-            Paragraph("Circular Flow (Round-Tripping)", style_body),
-            Paragraph("<font color='#64748B'>Not observed</font>", style_body),
-            Paragraph("No closed directed cycles detected in the 2-hop transaction subgraph for this reporting period.", style_body)
+    raw_patterns = report.get("evidence", {}).get("patterns") or report.get("patterns") or []
+    if raw_patterns and isinstance(raw_patterns, list):
+        rows = [
+            [
+                Paragraph("<b>Pattern Typology</b>", style_meta_label),
+                Paragraph("<b>Observation Status</b>", style_meta_label),
+                Paragraph("<b>Diagnostic Evidence & Analysis</b>", style_meta_label),
+            ]
         ]
-    ]
+        for p in raw_patterns:
+            p_name = escape_text(p.get("pattern", p.get("name", "Unknown Pattern")))
+            p_status = escape_text(p.get("status", "Not detected"))
+            p_desc = escape_text(p.get("evidence", p.get("description", p.get("notes", "Recorded during analysis."))))
+            color = "#B45309" if p_status in ("Observed", "Detected") else "#64748B"
+            rows.append([
+                Paragraph(f"<b>{p_name}</b>", style_body),
+                Paragraph(f"<font color='{color}'><b>{p_status}</b></font>", style_body),
+                Paragraph(p_desc, style_body)
+            ])
+        pattern_data = rows
+    else:
+        pattern_name = escape_text(report.get("observedPattern") or "None identified")
+        pattern_data = [
+            [
+                Paragraph("<b>Pattern Typology</b>", style_meta_label),
+                Paragraph("<b>Observation Status</b>", style_meta_label),
+                Paragraph("<b>Diagnostic Evidence & Analysis</b>", style_meta_label),
+            ],
+            [
+                Paragraph(f"<b>{pattern_name}</b>", style_body),
+                Paragraph("<font color='#B45309'><b>Recorded</b></font>", style_body),
+                Paragraph(f"Pattern '{pattern_name}' registered from case file.", style_body)
+            ]
+        ]
     pattern_table = Table(pattern_data, colWidths=[130, 94, 280])
     pattern_table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), BG_LIGHT),
@@ -323,10 +352,9 @@ def generate_report_pdf(report: dict) -> bytes:
     # 6. Section 4: Intelligence Engine Assessment (GraphSAGE GNN)
     story.append(Paragraph("4. GRAPH-BASED INTELLIGENCE ASSESSMENT", style_h2))
     gnn_note = (
-        f"The relational Graph Neural Network (GraphSAGE 3-layer inductive architecture) evaluated subject account "
-        f"<b>{report.get('accountId', '')}</b> with a Model Risk Score of <b>{score_pct}</b> "
-        f"relative to the calibrated operational threshold of <b>0.3781</b>. Activity contributing to the model's risk assessment "
-        f"includes multi-counterparty concentration, high transshipment velocity, and elevated connectivity to anomalous clusters. "
+        f"The relational Graph Neural Network (GraphSAGE inductive architecture) evaluated subject account "
+        f"<b>{escape_text(report.get('accountId', ''))}</b> with a Model Risk Score of <b>{score_pct}</b> "
+        f"relative to the calibrated operational threshold of <b>{thr_str}</b>. "
         f"This model-assessed risk serves as assistive intelligence to support the human investigator's adjudication."
     )
     gnn_table = Table([[Paragraph(gnn_note, style_body)]], colWidths=[504])
@@ -343,22 +371,26 @@ def generate_report_pdf(report: dict) -> bytes:
 
     # 7. Section 5: Investigator Findings & Compliance Decision
     story.append(Paragraph("5. COMPLIANCE ADJUDICATION & INVESTIGATOR FINDINGS", style_h2))
-    decision_val = report.get("decision") or "Escalate for Further Review"
-    notes_val = report.get("notes") or "Subpoena records requested for high-velocity transfer burst. Account referred to Special Investigations Unit (SIU) for cross-border jurisdiction review."
+    decision_val = report.get("decision") or "Continue Surveillance"
+    raw_notes = report.get("notes")
+    if not raw_notes or not str(raw_notes).strip():
+        notes_val = "None recorded"
+    else:
+        notes_val = str(raw_notes).strip()
     investigator_name = report.get("investigatorName") or "Harish GG (Lead AML Investigator)"
 
     decision_data = [
         [
             Paragraph("ADJUDICATED DECISION", style_meta_label),
-            Paragraph(f"<b><font color='{ACCENT_BLUE.hexval()}'>{decision_val}</font></b>", style_body)
+            Paragraph(f"<b><font color='{ACCENT_BLUE.hexval()}'>{escape_text(decision_val)}</font></b>", style_body)
         ],
         [
             Paragraph("INVESTIGATOR NOTES & FINDINGS", style_meta_label),
-            Paragraph(notes_val.replace("\n", "<br/>"), style_body)
+            Paragraph(escape_multiline(notes_val), style_body)
         ],
         [
             Paragraph("ADJUDICATING INVESTIGATOR", style_meta_label),
-            Paragraph(f"<b>{investigator_name}</b> &mdash; TRACE Compliance Division", style_body)
+            Paragraph(f"<b>{escape_text(investigator_name)}</b> &mdash; TRACE Compliance Division", style_body)
         ]
     ]
     dec_table = Table(decision_data, colWidths=[140, 364])

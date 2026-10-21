@@ -5,6 +5,7 @@ import { RiskBadge } from '../common/RiskBadge';
 import { StatusBadge } from '../common/StatusBadge';
 import { ArrowLeft, Download, Mail, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { reportService } from '../../services/reportService';
+import { formatAmount } from '../../utils/formatters';
 
 interface ReportDetailProps {
   initialReport?: Report;
@@ -18,6 +19,7 @@ interface ReportDetailProps {
     totalVolume: number;
     transactionCount: number;
     connectedAccountsCount: number;
+    whyFlagged?: string;
   };
 }
 
@@ -47,23 +49,25 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
   const caseId = initialReport?.caseId ?? casePreload?.caseId ?? 'CASE-DRAFT';
   const accountId = initialReport?.accountId ?? casePreload?.accountId ?? 'UNKNOWN';
   const riskLevel = initialReport?.riskLevel ?? casePreload?.riskLevel ?? 'MEDIUM';
-  const riskScore = initialReport?.modelAssessment?.riskScore ?? casePreload?.riskScore ?? 0.50;
+  const riskScore = initialReport?.modelAssessment?.riskScore ?? casePreload?.riskScore;
   const summary = initialReport?.summary ?? casePreload?.summary ?? (casePreload?.accountId ? `Automated compliance investigation opened for subject account ${casePreload.accountId}.` : 'Investigation opened for compliance adjudication.');
-  const pattern = initialReport?.observedPattern ?? casePreload?.primaryPattern ?? 'Layering';
+  const pattern = initialReport?.observedPattern ?? casePreload?.primaryPattern ?? '';
+  const contributingFactors = (casePreload as any)?.whyFlagged || (initialReport as any)?.whyFlagged || (pattern ? `Observed pattern: ${pattern}` : 'Not available');
   const evidence = initialReport?.evidence ?? {
     totalTransferred: casePreload?.totalVolume ?? 0,
     transactionCount: casePreload?.transactionCount ?? 0,
     connectedAccountsCount: casePreload?.connectedAccountsCount ?? 0,
   };
 
-
-  const formatAmount = (val: number) => {
-    if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
-    if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
-    return `$${val.toLocaleString()}`;
-  };
-
   const handleSave = async () => {
+    if (riskScore == null) {
+      setBoundaryNotification({
+        type: 'warning',
+        message: 'Cannot save report: Model risk score is missing for this account.',
+      });
+      return;
+    }
+
     setIsSaving(true);
     try {
       const input: CreateReportInput = {
@@ -73,10 +77,10 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
         riskLevel,
         decision,
         summary,
-        observedPattern: pattern,
+        observedPattern: pattern || 'Not available',
         evidence,
         modelAssessment: {
-          riskScore,
+          riskScore: riskScore,
           threshold: 0.3781,
           assessmentNote: 'Calculated via 3-hop GraphSAGE inductive message passing.',
         },
@@ -311,7 +315,7 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
             <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <RiskBadge level={riskLevel} />
               <span className="mono tabular" style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-primary)' }}>
-                Score: {(riskScore * 100).toFixed(0)}%
+                Score: {riskScore != null ? `${(riskScore * 100).toFixed(0)}%` : 'Not available'}
               </span>
             </div>
           </div>
@@ -333,7 +337,7 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
             2. Observed Pattern Classification
           </div>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-            {pattern}
+            {pattern || 'Not available'}
           </div>
           <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginTop: 2 }}>
             Categorized via multi-hop topological traversal heuristics.
@@ -373,8 +377,14 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
             4. Intelligence Engine Assessment
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-            The GraphSAGE relational neural network evaluated this account with a model risk score of <b>{Math.round(riskScore * 100)}%</b> (operating threshold: 0.3781).
-            Activity contributing to the model's risk assessment includes multi-counterparty concentration and rapid pass-through velocity.
+            {riskScore != null ? (
+              <>The GraphSAGE relational neural network evaluated this account with a model risk score of <b>{Math.round(riskScore * 100)}%</b> (operating threshold: 0.3781).</>
+            ) : (
+              <>The GraphSAGE relational neural network evaluation: <b>Not available</b>.</>
+            )}
+            <div style={{ marginTop: 4 }}>
+              Activity contributing to the model's risk assessment: {contributingFactors}
+            </div>
           </div>
         </div>
 

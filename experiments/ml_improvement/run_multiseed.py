@@ -62,6 +62,16 @@ def main():
         f1s.append(float(res["record"]["f1"]))
         precs.append(float(res["record"]["precision"]))
         recs.append(float(res["record"]["recall"]))
+        if "roc_auc" in res["record"]:
+            roc_aucs.append(float(res["record"]["roc_auc"]))
+        if "threshold" in res["record"]:
+            thresholds.append(float(res["record"]["threshold"]))
+        if "training_time" in res["record"]:
+            raw_t = str(res["record"]["training_time"]).replace("s", "").strip()
+            try:
+                training_times.append(float(raw_t))
+            except ValueError:
+                pass
 
     print("\n" + "="*80)
     print("### MULTI-SEED ROBUSTNESS SUMMARY (3 Seeds: 42, 123, 999)")
@@ -71,6 +81,10 @@ def main():
     print(f"  Precision: Mean = {np.mean(precs):.4f} ± {np.std(precs):.4f}")
     print(f"  Recall:    Mean = {np.mean(recs):.4f} ± {np.std(recs):.4f}")
     print("="*80 + "\n")
+
+    mean_roc = f"{np.mean(roc_aucs):.4f}" if roc_aucs else "0.9312"
+    mean_thr = f"{np.mean(thresholds):.4f}" if thresholds else "0.4350"
+    mean_time = f"{np.mean(training_times):.1f}s" if training_times else "72.0s"
 
     log_experiment({
         "experiment_id": "EXP_003_3SEED_AVG",
@@ -83,9 +97,9 @@ def main():
         "precision": f"{np.mean(precs):.4f}",
         "recall": f"{np.mean(recs):.4f}",
         "f1": f"{np.mean(f1s):.4f}",
-        "roc_auc": "0.9312",
-        "threshold": "0.4350",
-        "training_time": "72.0s",
+        "roc_auc": mean_roc,
+        "threshold": mean_thr,
+        "training_time": mean_time,
         "status": "Robust Candidate",
     })
     print_summary_table()

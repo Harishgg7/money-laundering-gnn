@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TopAccountSummary } from '../../types';
 import { RiskBadge } from '../common/RiskBadge';
 import { ArrowUpRight, Share2 } from 'lucide-react';
+import { formatAmount } from '../../utils/formatters';
 
 interface TopAccountsTableProps {
   accounts: TopAccountSummary[];
@@ -10,12 +11,6 @@ interface TopAccountsTableProps {
 
 export const TopAccountsTable: React.FC<TopAccountsTableProps> = ({ accounts }) => {
   const navigate = useNavigate();
-
-  const formatAmount = (val: number) => {
-    if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
-    if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
-    return `$${val.toLocaleString()}`;
-  };
 
   return (
     <div className="table-card">

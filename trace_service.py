@@ -6,6 +6,7 @@ Preserves existing preprocess.py, model.py, train.py, baselines.py, and explain.
 import os
 import json
 from datetime import datetime
+from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -15,6 +16,10 @@ from torch_geometric.explain import Explainer, GNNExplainer
 
 import config
 import model as model_module
+
+BASE_DIR = Path(__file__).resolve().parent
+OUTPUTS_DIR = BASE_DIR / "outputs"
+DATA_DIR = BASE_DIR / "data"
 
 FEATURE_NAMES = [
     "In-Degree (Tx Count)",
@@ -32,6 +37,19 @@ FEATURE_NAMES = [
 
 
 class TraceService:
+    DISPLAY_TO_INTERNAL_STATUS = {
+        "OPEN INVESTIGATION": "OPEN INVESTIGATION",
+        "UNDER REVIEW": "OPEN INVESTIGATION",
+        "UNDER SURVEILLANCE": "UNDER SURVEILLANCE",
+        "ELEVATED TO FIU": "ELEVATED TO FIU",
+        "ESCALATED": "ELEVATED TO FIU",
+        "CLOSED": "CLOSED",
+        "CLOSED — NO FURTHER ACTION": "CLOSED",
+        "CLOSED - NO FURTHER ACTION": "CLOSED",
+        "RESOLVED": "RESOLVED",
+        "NEW": "NEW",
+    }
+
     def __init__(self):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.data = None
@@ -47,7 +65,7 @@ class TraceService:
 
     def _initialize(self):
         # 1. Load pre-built enriched cases if already generated
-        cases_path = os.path.join("outputs", "enriched_cases.json")
+        cases_path = OUTPUTS_DIR / "enriched_cases.json"
         if os.path.exists(cases_path):
             try:
                 with open(cases_path, "r", encoding="utf-8") as f:
@@ -59,7 +77,10 @@ class TraceService:
                 print(f"[TRACE] Warning loading cached cases: {e}")
 
         # 2. Load PyG Graph if present on disk
-        graph_path = getattr(config, "GRAPH_PATH", os.path.join("data", "processed", "aml_graph.pt"))
+        raw_graph_path = getattr(config, "GRAPH_PATH", None)
+        graph_path = Path(raw_graph_path) if raw_graph_path else (DATA_DIR / "processed" / "aml_graph.pt")
+        if not graph_path.is_absolute():
+            graph_path = BASE_DIR / graph_path
         if not os.path.exists(graph_path):
             print(f"[TRACE] {graph_path} not found. Running in pre-cached case mode.")
             return
@@ -73,13 +94,13 @@ class TraceService:
                 self.reverse_node_map[idx] = str(acc)
 
         # Load complete 515K account map from node_map.parquet if available
-        parquet_path = os.path.join("data", "processed", "node_map.parquet")
+        parquet_path = DATA_DIR / "processed" / "node_map.parquet"
         if os.path.exists(parquet_path):
             try:
                 import pandas as pd
                 df = pd.read_parquet(parquet_path)
-                keys = df["account_key"].values
-                nodes = df["node_id"].values
+                keys = [str(k) for k in df["account_key"].values]
+                nodes = [int(n) for n in df["node_id"].values]
                 self.parquet_keys = keys
                 self.parquet_nodes = nodes
                 self.node_id_map.update(dict(zip(keys, nodes)))
@@ -93,10 +114,10 @@ class TraceService:
         # Locate trained checkpoint
         ckpt_candidates = [
             getattr(config, "MODEL_PATH", ""),
-            os.path.join("outputs", "graphsage_best.pt"),
-            os.path.join("outputs", "model.pt"),
-            os.path.join("checkpoints", "best_model.pt"),
-            "model.pt",
+            str(OUTPUTS_DIR / "graphsage_best.pt"),
+            str(OUTPUTS_DIR / "model.pt"),
+            str(BASE_DIR / "checkpoints" / "best_model.pt"),
+            str(BASE_DIR / "model.pt"),
         ]
         ckpt_path = next((p for p in ckpt_candidates if p and os.path.exists(p)), None)
 
@@ -132,7 +153,7 @@ class TraceService:
 
         ea = self.data.edge_attr.to(self.device) if has_ea else None
         # Full-batch GNN inference (with disk cache for instant subsequent restarts)
-        probs_cache_path = os.path.join("outputs", "gnn_probs.pt")
+        probs_cache_path = OUTPUTS_DIR / "gnn_probs.pt"
         if os.path.exists(probs_cache_path):
             print(f"[TRACE] Loading cached GNN probabilities from {probs_cache_path}...")
             self.gnn_probs = torch.load(probs_cache_path, map_location=self.device, weights_only=False)
@@ -161,7 +182,7 @@ class TraceService:
         print(f"[TRACE] Active validation-tuned threshold: {self.val_threshold:.4f}")
 
         # Feature-only baseline probabilities (MLP comparison)
-        mlp_probs_path = os.path.join("outputs", "mlp_probs.pt")
+        mlp_probs_path = OUTPUTS_DIR / "mlp_probs.pt"
         if os.path.exists(mlp_probs_path):
             self.mlp_probs = torch.load(mlp_probs_path, map_location=self.device, weights_only=False)
         else:
@@ -207,6 +228,15 @@ class TraceService:
             idx = int(q)
             if 0 <= idx < self.data.num_nodes:
                 return idx
+        if self.data is None and self.enriched_cases:
+            q_lower = q.lower()
+            for case_key, cdata in self.enriched_cases.items():
+                c_acc = str(cdata.get("account_id", "")).lower()
+                c_case = str(cdata.get("case_id", "")).lower()
+                c_key = str(case_key).lower()
+                c_nid = str(cdata.get("node_id", ""))
+                if q_lower in (c_acc, c_case, c_key, c_nid):
+                    return int(cdata.get("node_id", 0))
         raise KeyError(f"Account '{query}' not found.")
 
     def get_meta(self) -> dict:
@@ -687,8 +717,9 @@ class TraceService:
                 "totalVolume": round(vol, 2),
                 "transactionCount": max(1, int(round(abs(n.get("in_degree", 1)) + abs(n.get("out_degree", 1))))),
                 "isTarget": is_tgt,
-            })
-
+            })        # Sort target first, truncate to limit, then filter edges
+        nodes.sort(key=lambda item: not item.get("isTarget", False))
+        nodes = nodes[:max(1, limit)]
         rendered_ids = {node["id"] for node in nodes}
 
         edges = []
@@ -709,7 +740,7 @@ class TraceService:
                     "transactionCount": max(1, int(round(amt / 12000.0))),
                 })
 
-        return {"nodes": nodes[:limit], "edges": edges[:55]}
+        return {"nodes": nodes, "edges": edges[:55]}
 
     def get_dashboard_metrics(self, range_filter: str = "30D") -> dict:
         """
@@ -1041,10 +1072,39 @@ class TraceService:
         """
         Updates case status and persists to outputs/enriched_cases.json.
         """
+        if not new_status or not isinstance(new_status, str):
+            return False
+        clean_key = new_status.strip().upper()
+        internal_status = self.DISPLAY_TO_INTERNAL_STATUS.get(clean_key)
+        if not internal_status:
+            return False
+
         q = str(case_or_account_id).strip().upper()
-        cases_file = os.path.join("outputs", "enriched_cases.json")
+        cases_file = OUTPUTS_DIR / "enriched_cases.json"
         if not os.path.exists(cases_file):
             return False
+        with open(cases_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        target_key = None
+        for k, v in data.get("cases", {}).items():
+            if (
+                k.upper() == q
+                or v.get("case_id", "").upper() == q
+                or v.get("account_id", "").upper() == q
+                or str(v.get("node_id")) == q
+            ):
+                target_key = k
+                break
+
+        if target_key:
+            data["cases"][target_key]["status"] = internal_status
+            with open(cases_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+            if target_key in self.enriched_cases:
+                self.enriched_cases[target_key]["status"] = internal_status
+            return True
+        return False
         with open(cases_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 

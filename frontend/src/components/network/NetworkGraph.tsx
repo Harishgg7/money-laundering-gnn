@@ -60,7 +60,7 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({
 
   // Compute deterministic target-centered layout whenever data or target account changes
   useEffect(() => {
-    const activeTarget = targetAccountId || selectedNodeId || null;
+    const activeTarget = targetAccountId || null;
     const layout = computeTargetCenteredLayout(data.nodes, data.edges, activeTarget);
     layoutRef.current = layout;
     nodesRef.current = layout.nodes;
@@ -68,7 +68,7 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({
 
     // Auto-fit to viewport with target at visual center
     recenter();
-  }, [data, targetAccountId, recenter, selectedNodeId]);
+  }, [data, targetAccountId, recenter]);
 
   // Center on a specific node at investigation zoom
   const centerOnNode = useCallback((node: NetworkNode & { x: number; y: number }, targetZoom = 1.15) => {
@@ -467,23 +467,33 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({
     setIsDragging(false);
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
-    const newZoom = Math.min(Math.max(camera.zoom * zoomFactor, 0.35), 2.8);
-
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
 
-    setCamera((prev) => ({
-      zoom: newZoom,
-      x: mouseX - (mouseX - prev.x) * (newZoom / prev.zoom),
-      y: mouseY - (mouseY - prev.y) * (newZoom / prev.zoom),
-    }));
-  };
+    const onWheelNative = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.12 : 0.89;
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      setCamera((prev) => {
+        const newZoom = Math.min(Math.max(prev.zoom * zoomFactor, 0.35), 2.8);
+        return {
+          zoom: newZoom,
+          x: mouseX - (mouseX - prev.x) * (newZoom / prev.zoom),
+          y: mouseY - (mouseY - prev.y) * (newZoom / prev.zoom),
+        };
+      });
+    };
+
+    canvas.addEventListener('wheel', onWheelNative, { passive: false });
+    return () => {
+      canvas.removeEventListener('wheel', onWheelNative);
+    };
+  }, []);
 
   return (
     <div
@@ -505,7 +515,6 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
       />
 
       {/* Floating Viewport Controls */}

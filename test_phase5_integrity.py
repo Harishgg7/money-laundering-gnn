@@ -38,23 +38,23 @@ def sha256_file(path: str) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def test_phase5():
+def run_phase5():
     print("=" * 80)
     print("  TRACE PHASE 5 — ML INTEGRITY & PROMOTED MODEL TESTS")
     print("=" * 80)
     passed = 0
     total = 10
 
-    manifest_path = Path("models/model_manifest.json")
+    manifest_path = ROOT / "models" / "model_manifest.json"
 
     # Test 1: Model artifacts exist
     try:
         assert manifest_path.exists(), "Missing models/model_manifest.json"
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
-        gnn_path = Path(manifest["production_model"]["artifacts"]["gnn_encoder"]["path"])
-        xgb_path = Path(manifest["production_model"]["artifacts"]["xgb_classifier"]["path"])
-        probs_path = Path(manifest["production_model"]["artifacts"]["cached_probabilities"]["path"])
+        gnn_path = ROOT / manifest["production_model"]["artifacts"]["gnn_encoder"]["path"]
+        xgb_path = ROOT / manifest["production_model"]["artifacts"]["xgb_classifier"]["path"]
+        probs_path = ROOT / manifest["production_model"]["artifacts"]["cached_probabilities"]["path"]
         assert gnn_path.exists(), f"Missing {gnn_path}"
         assert xgb_path.exists(), f"Missing {xgb_path}"
         assert probs_path.exists(), f"Missing {probs_path}"
@@ -78,7 +78,7 @@ def test_phase5():
 
     # Test 3: Feature count is exactly 29
     try:
-        feat_tensor = torch.load("experiments/ml_improvement/extended_features.pt", weights_only=False)
+        feat_tensor = torch.load(ROOT / "experiments" / "ml_improvement" / "extended_features.pt", weights_only=False)
         assert feat_tensor.size(1) == 29
         assert manifest["production_model"]["feature_count"] == 29
         print(f"[PASS] Test 03: Feature count verification             | Exactly 29 engineered AML features (dim={feat_tensor.shape})")
@@ -157,7 +157,7 @@ def test_phase5():
         rollback = manifest.get("rollback_model", {})
         assert rollback.get("model_version") == "TRACE-GSAGE-v1"
         assert rollback.get("operating_threshold") == 0.3781
-        rb_path = Path(rollback["artifacts"]["checkpoint"]["path"])
+        rb_path = ROOT / rollback["artifacts"]["checkpoint"]["path"]
         assert rb_path.exists()
         assert os.path.getsize(str(rb_path)) == 511330
         print(f"[PASS] Test 10: Preserved rollback architecture        | Rollback=TRACE-GSAGE-v1 (511,330B, thr=0.3781) intact")
@@ -165,11 +165,15 @@ def test_phase5():
     except Exception as e:
         print(f"[FAIL] Test 10: Rollback preservation check failed: {e}")
 
+    pct = int(round((passed / total) * 100)) if total > 0 else 0
     print("=" * 80)
-    print(f"  PHASE 5 INTEGRITY RESULTS: {passed}/{total} TESTS PASSED (100% SUCCESS)")
+    print(f"  PHASE 5 INTEGRITY RESULTS: {passed}/{total} TESTS PASSED ({pct}% SUCCESS)")
     print("=" * 80)
     return passed == total
 
+def test_phase5():
+    assert run_phase5(), "Phase 5 ML integrity checks failed."
+
 if __name__ == "__main__":
-    success = test_phase5()
+    success = run_phase5()
     sys.exit(0 if success else 1)

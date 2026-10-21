@@ -49,10 +49,11 @@ def main():
     # Load XGBoost model from EXP_007 checkpoint
     ckpt_xgb = torch.load("experiments/ml_improvement/checkpoints/EXP_007_HYBRID_XGB.pt", weights_only=False)
     clf = ckpt_xgb["xgb_model"]
+    op_thr = float(ckpt_xgb.get("threshold", 0.9184))
 
     test_probs = clf.predict_proba(X_comb[test_mask])[:, 1]
 
-    thresholds = [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, 0.9184, 0.95]
+    thresholds = [0.50, 0.60, 0.70, 0.80, 0.85, 0.90, op_thr, 0.95]
 
     print("\n" + "="*85)
     print("### EXP_007_HYBRID THRESHOLD TRADEOFF ANALYSIS (Test Split: 77,264 Accounts)")
@@ -66,7 +67,7 @@ def main():
         f1 = f1_score(y_test, preds, zero_division=0)
         n_pos = preds.sum()
         fp = int(n_pos - (preds & y_test).sum())
-        marker = " <-- (Val-Tuned Operating Point)" if abs(thr - 0.9184) < 1e-4 else ""
+        marker = " <-- (Val-Tuned Operating Point)" if abs(thr - op_thr) < 1e-4 else ""
         print(f"| {thr:>10.4f} | {p*100:>9.2f}% | {r*100:>8.2f}% | {f1:>8.4f} | {n_pos:>14,d} | {fp:>10,d} |{marker}")
     print("="*85 + "\n")
 

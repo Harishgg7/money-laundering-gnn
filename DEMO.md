@@ -14,8 +14,8 @@ The platform runs as a single, fully integrated web application on `http://127.0
    - **`1`** &rarr; Switch to **CASE 01** (Smurfing / Fan-In Hub)
    - **`2`** &rarr; Switch to **CASE 02** (Inflow Aggregation Ring)
    - **`3`** &rarr; Switch to **CASE 03** (Legitimate Retail Account)
-   - **`E`** &rarr; Trigger **[ EXPLAIN PREDICTION ]**
-   - **`R`** &rarr; Reset graph zoom and pan
+   - **`E`** &rarr; Open **Escalate Case** modal
+   - **`R`** &rarr; Open **SAR Report** tab
 
 ---
 
@@ -31,7 +31,7 @@ The platform runs as a single, fully integrated web application on `http://127.0
 > *"Both our MLP baseline and GraphSAGE share identical account-level features. The jump from 48.7% to 57.0% precision — and nearly doubling PR-AUC from 0.184 to 0.342 — isolates the exact value provided by the graph structure."*
 
 ### 1:30 – 3:00 &bull; Click [ INVESTIGATE ACCOUNT ] (Case 01)
-> *"Let's investigate Account `0214-80C1C8AC0`. At the validation-tuned threshold of 0.378, TRACE flags this account with a 94.2% GNN model risk score. Notice the money flow animation: eight distinct feeder accounts funnel small transfers into an intermediary hub, which executes one decisive transfer into the target."*
+> *"Let's investigate Account `8054A41C0` (Case 01). At the validation-tuned threshold of 0.3781, TRACE flags this account with a 45.0% GNN model risk score (elevated from 17.1% by MLP). Notice the money flow animation: five feeder accounts funnel transactions into this hub account."*
 
 ### 3:00 – 3:40 &bull; Click [ EXPLAIN PREDICTION ]
 > *"Regulators do not accept black-box predictions. GNNExplainer isolates the decisive transaction pathways with quantitative faithfulness (Fidelity+ drop of +0.1141). Compliance officers receive a court-ready audit trail naming the specific counterparties and amounts."*

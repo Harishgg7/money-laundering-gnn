@@ -37,7 +37,7 @@ A comprehensive validation protocol was conducted spanning:
 
 ## 3. Backend/API Validation
 
-The production backend (`server.py`) operates as a FastAPI application connected directly to the preprocessed PyTorch Geometric IBM AML graph (`aml_graph.pt`) and frozen GraphSAGE model.
+The production backend (`server.py`) operates as a standard-library `ThreadingHTTPServer` connected directly to the preprocessed PyTorch Geometric IBM AML graph (`aml_graph.pt`) and frozen GraphSAGE model. It accepts query parameters such as `account`, `account_id`, and `q` across its endpoints and returns standardized JSON payloads.
 
 ### 3.1 Dashboard Endpoint (`GET /api/dashboard`)
 - **Accounts Count**: `515,088` (verified)
@@ -46,7 +46,7 @@ The production backend (`server.py`) operates as a FastAPI application connected
 - **Model Checkpoint Size**: `511,330` bytes (verified)
 - **Top Flagged Accounts**: Returns ranked accounts with canonical account IDs, node IDs, transaction volumes, risk levels (`HIGH`), and calibrated model risk scores (> `0.3781`).
 
-### 3.2 Account Profile Endpoints (`GET /api/accounts/{account_id}`)
+### 3.2 Account Profile Endpoints (`GET /api/accounts/{account_id}` or `GET /api/accounts?account=...` / `?account_id=...`)
 Tested across diverse risk tiers:
 - **High-Risk Account (`8054A41C0`)**:
   - Model Risk Score: `0.4498`
@@ -64,17 +64,17 @@ Tested across diverse risk tiers:
   - Profiles generated dynamically from graph node features and edge indices.
 - **Nonexistent Account (`NONEXISTENT_999999`)**:
   - HTTP Status: `404 Not Found`
-  - Response Body: `{"detail": "Account 'NONEXISTENT_999999' not found."}`
+  - Response Body: `{"error": "Account 'NONEXISTENT_999999' not found in the 515K network."}`
   - Zero traceback or internal code structure exposed.
 
-### 3.3 Network Endpoint (`GET /api/network?target_account=...`)
+### 3.3 Network Endpoint (`GET /api/network?account=...` or `?account_id=...` or `?target_account=...`)
 - **Subject-Centered Neighborhood**: Target account is strictly positioned as the root subject node.
-- **Bounded Neighborhood Extraction**: Node count strictly clamped between 1 and 35 nodes (average: 9 to 28 nodes). Edge count strictly clamped between 0 and 55 edges.
+- **Fixed 3-Hop Neighborhood Extraction**: `TraceService.investigate` extracts a fixed 3-hop neighborhood capped at 28 nodes without using depth as a 2-hop bound (with 0 to 55 edges).
 - **Deterministic Ordering**: Repeated calls for the same account return identical node and edge arrays.
 - **Risk Filtering**: `risk_level` filter query parameter (`ALL`, `HIGH`, `MEDIUM`, `LOW`) isolates sub-populations without breaking graph topology.
 
-### 3.4 Search Endpoint (`GET /api/network/search?q=...`)
-- **Prefix / Substring Search**: Returns matching accounts with account ID, internal node index, risk tier, and score.
+### 3.4 Search Endpoint (`GET /api/network/search?q=...` or `?account=...`)
+- **Prefix / Substring Search**: Returns matching accounts with account ID, internal node index, risk tier, and score using `q` parameter.
 - **Empty / Nonexistent Query**: Clean empty array `[]` returned with HTTP 200.
 
 ---
@@ -168,7 +168,7 @@ The Phase 3.2 network usability enhancements were verified under realistic inves
 ## 7. Reporting Validation
 
 ### 7.1 Report Creation & Persistence
-- Reports are persisted on the backend in `reports.json` with unique IDs (`REP-XXXXXXXX`).
+- Reports are persisted on the backend in `outputs/reports_registry.json` with sequential report IDs (`REP-2026-00NN`).
 - Dynamic creation preserves Account ID, Risk Score, Risk Level, Adjudication Decision, Investigator Notes, and Timestamp.
 
 ### 7.2 Idempotent Report Update
@@ -213,7 +213,7 @@ Tested via both automated REST tests and live browser UI:
 ## 9. Security & Error Handling
 
 A production safety review verified:
-1. **Traceback Leakage**: Nonexistent account lookups (`/api/accounts/INVALID`, `/api/network?target_account=INVALID`) return standard HTTP 404 JSON envelopes (`{"detail": "..."}`) with zero Python stack traces or framework paths exposed.
+1. **Traceback Leakage**: Nonexistent account lookups (`/api/accounts/INVALID`, `/api/network?account=INVALID`) return standard HTTP 404 JSON envelopes (`{"error": "..."}`) with zero Python stack traces or framework paths exposed.
 2. **Path Sanitization**: No local absolute filesystem paths are returned in API response bodies or embedded in client-side bundles.
 3. **Environment Secrets**: No SMTP passwords, internal keys, or API tokens are hardcoded in frontend source or committed configuration files.
 4. **Input Boundary Enforcement**: Excessively long query parameters or malformed account IDs are rejected or safely sanitized without server process exceptions.
@@ -236,7 +236,7 @@ Mock files remain isolated for offline unit tests and development fallback only.
 
 All performance metrics were directly measured under live load:
 
-- **Graph Neighborhood Query Latency**: `28 ms – 44 ms` on local FastAPI server querying the 515,088-account dataset.
+- **Graph Neighborhood Query Latency**: `28 ms – 44 ms` on local ThreadingHTTPServer querying the 515,088-account dataset.
 - **Graph Payload Size**: Bounded between `3.8 KB` (isolated/small) and `8.4 KB` (28 nodes, 55 edges).
 - **Client Render Performance**: Canvas 2D render loop maintains stable **60 FPS** during real-time pan and zoom interactions.
 - **Production Build Execution**: `tsc -b && vite build` completes in **337 ms** (1,978 modules transformed).

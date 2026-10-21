@@ -39,23 +39,23 @@ The frozen GraphSAGE baseline represents the production benchmark evaluated on t
 
 `EXP_003` evaluated an enhanced pure GraphSAGE architecture combining 29 engineered AML behavioral features with bidirectional (undirected) message passing:
 
-- **Single-Run Test Metrics (Seed 42)**:
+- **Selected Primary Checkpoint (`EXP_003_FEAT29_UNDIR.pt`, 50-epoch run)**:
   - PR-AUC: **`0.4125`** (+0.0705 over baseline)
   - ROC-AUC: **`0.9331`**
   - F1-Score: **`0.4460`**
   - Precision: **`63.44%`**
   - Recall: **`34.38%`**
-  - Threshold: **`0.4355`**
+  - Operating Threshold: **`0.4355`**
 
-### Multi-Seed Stability (EXP_003 across 3 seeds):
-| Seed | PR-AUC | ROC-AUC | F1-Score | Precision | Recall | Selected Threshold |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Seed 42** | 0.4074 | 0.9168 | 0.4380 | 79.78% | 30.19% | 0.3788 |
-| **Seed 123** | 0.4039 | 0.9320 | 0.4291 | 79.77% | 29.35% | 0.3953 |
-| **Seed 999** | 0.4046 | 0.9279 | 0.4245 | 60.47% | 32.70% | 0.3796 |
-| **Mean ± Std** | **0.4053 ± 0.0015** | **0.9256 ± 0.0064** | **0.4305 ± 0.0056** | **73.34% ± 9.1%** | **30.75% ± 1.4%** | **0.3846** |
+### Multi-Seed Stability (`run_multiseed.py` across 3 seeds, 15-epoch validation protocol):
+| Seed | PR-AUC | ROC-AUC | F1-Score | Precision | Recall | Selected Threshold | Configuration / Checkpoint |
+|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---|
+| **Seed 42** | 0.4074 | 0.9168 | 0.4380 | 79.78% | 30.19% | 0.3788 | `run_multiseed.py` seed 42 run |
+| **Seed 123** | 0.4039 | 0.9320 | 0.4291 | 79.77% | 29.35% | 0.3953 | `run_multiseed.py` seed 123 run |
+| **Seed 999** | 0.4046 | 0.9279 | 0.4245 | 60.47% | 32.70% | 0.3796 | `run_multiseed.py` seed 999 run |
+| **Mean ± Std** | **0.4053 ± 0.0015** | **0.9256 ± 0.0064** | **0.4305 ± 0.0056** | **73.34% ± 9.1%** | **30.75% ± 1.4%** | **0.3846** | 3-seed aggregate mean |
 
-The standard deviation of PR-AUC is only **±0.0015**, proving that the pure GNN improvement past 0.40 is mathematically robust.
+The standard deviation of PR-AUC across seeds is only **±0.0015**, confirming that pure GraphSAGE reproducibly exceeds 0.40 PR-AUC regardless of weight initialization. The selected checkpoint `EXP_003_FEAT29_UNDIR.pt` reaches `0.4125` PR-AUC with full 50-epoch training convergence.
 
 ---
 
@@ -139,10 +139,10 @@ Because XGBoost was trained with `scale_pos_weight = 56.0` to compensate for the
 | `0.8000` | 22.54% | 53.77% | 0.3176 | 2,276 | 1,763 | Balanced triage |
 | `0.8500` | 38.56% | 42.77% | 0.4056 | 1,058 | 650 | Targeted review queue |
 | `0.9000` | 64.63% | 37.74% | 0.4765 | 557 | 197 | High-efficiency queue |
-| **`0.9184`** | **72.04%** | **37.00%** | **0.4889** | **490** | **137** | **Optimal Validation Operating Point** |
+| **`0.9184`** | **71.89%** | **37.00%** | **0.4886** | **491** | **138** | **Optimal Validation Operating Point** |
 | `0.9500` | 79.80% | 33.96% | 0.4765 | 406 | 82 | Low-workload regulatory SAR queue |
 
-At `0.9184`, TRACE flags only **490 total accounts** out of 77,264, capturing **353 confirmed illicit laundering accounts** with only **137 false alarms** (a false alarm rate on licit accounts of only **0.18%**).
+At `0.9184`, TRACE flags only **491 total accounts** out of 77,264, capturing **353 confirmed illicit laundering accounts** with only **138 false alarms** (a false alarm rate on licit accounts of only **0.18%**).
 
 ---
 
@@ -185,18 +185,18 @@ To definitively prove that the hybrid improvement stems from relational graph in
 
 ## 11. Temporal Validation (Chronological Split)
 
-A chronological temporal validation was conducted by ordering all 515,088 accounts by their latest transaction timestamp:
-- **Training Window (Earliest 70%)**: 360,561 accounts (2,990 positive = 0.83%)
-- **Validation Window (Middle 15%)**: 77,263 accounts (1,148 positive = 1.49%)
-- **Test Window (Latest 15%)**: 77,264 accounts (2,219 positive = 2.87%)
+An exploratory chronological temporal validation was conducted by ordering all 515,088 accounts by their latest transaction timestamp:
+- **Training Window (Earliest 70%)**: 360,561 accounts (2,990 positive = 0.83% prevalence)
+- **Validation Window (Middle 15%)**: 77,263 accounts (1,148 positive = 1.49% prevalence)
+- **Test Window (Latest 15%)**: 77,264 accounts (2,219 positive = 2.87% prevalence)
 
-| Evaluation Mode | PR-AUC | ROC-AUC | F1-Score | Precision | Recall |
-|---|:---:|:---:|:---:|:---:|:---:|
-| **Stratified Benchmark (EXP_007)** | **0.4569** | **0.9412** | **0.4886** | **71.89%** | **37.00%** |
-| **Chronological Forward-Test** | **0.5493** | **0.9063** | **0.5582** | **80.98%** | **42.59%** |
-| **Delta (Temporal vs Benchmark)** | **+0.0924** | -0.0349 | **+0.0696** | **+9.09%** | **+5.59%** |
+| Evaluation Mode | Test Prevalence | PR-AUC | ROC-AUC | F1-Score | Precision | Recall | Notes |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|---|
+| **Stratified Benchmark (EXP_007)** | 1.23% (954 / 77,264) | **0.4569** | **0.9412** | **0.4886** | **71.89%** | **37.00%** | Stratified split reference |
+| **Chronological Forward-Test** | 2.87% (2,219 / 77,264) | **0.5493** | **0.9063** | **0.5582** | **80.98%** | **42.59%** | Chronological test window |
 
-**Conclusion**: The hybrid model generalizes effectively when deployed chronologically to predict future transactions, achieving **0.5493 PR-AUC** and **80.98% precision** on future accounts.
+> [!NOTE]
+> **Prevalence and Isolation Notice**: The chronological test set has a 2.87% illicit prevalence compared to 1.23% in the stratified benchmark (2.3x higher). Because PR-AUC baseline scales directly with positive class prevalence, the raw PR-AUC delta cannot be cited as mathematical evidence of superior temporal generalization. Furthermore, because graph edges and tabular aggregations in the global dataset span the full observation period rather than strict timestamp cutoffs, the temporal generalization claim is excluded from production promotion criteria until full temporal re-extraction with cutoff-bounded graphs is executed.
 
 ---
 
@@ -311,4 +311,4 @@ RESULT: 26/26 TESTS PASSED (100% SUCCESS)
 ## 15. Final Model Decision
 
 # PROMOTED: TRACE-HYBRID-v2
-**Decision**: The candidate model `EXP_007_HYBRID` has satisfied all 8 promotion gates with zero leakage, verified multi-seed stability (0.4577 ± 0.0011), proven embedding necessity (0.4363 on GNN embeddings alone vs 0.3429 tabular alone), temporal generalization (0.5493 PR-AUC), and complete regression test compliance. It is hereby declared the primary production model under version `TRACE-HYBRID-v2`, with `TRACE-GSAGE-v1` preserved as the rollback target.
+**Decision**: The candidate model `EXP_007_HYBRID` has satisfied core promotion gates with zero data leakage, verified multi-seed stability (0.4577 ± 0.0011), proven embedding necessity (0.4363 on GNN embeddings alone vs 0.3429 tabular alone), and complete regression test compliance across all 26 Phase 4 and 10 Phase 5 integrity tests. It is hereby declared the primary production model under version `TRACE-HYBRID-v2`, with `TRACE-GSAGE-v1` preserved as the verified rollback target.

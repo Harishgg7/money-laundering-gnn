@@ -4,6 +4,7 @@ import { Investigation } from '../../types';
 import { RiskBadge } from '../common/RiskBadge';
 import { StatusBadge } from '../common/StatusBadge';
 import { ArrowUpRight } from 'lucide-react';
+import { formatAmount } from '../../utils/formatters';
 
 interface InvestigationListProps {
   investigations: Investigation[];
@@ -11,12 +12,6 @@ interface InvestigationListProps {
 
 export const InvestigationList: React.FC<InvestigationListProps> = ({ investigations }) => {
   const navigate = useNavigate();
-
-  const formatAmount = (val: number) => {
-    if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
-    if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
-    return `$${val.toLocaleString()}`;
-  };
 
   return (
     <div className="table-card">

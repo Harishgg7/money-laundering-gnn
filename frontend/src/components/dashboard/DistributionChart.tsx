@@ -76,7 +76,7 @@ export const DistributionChart: React.FC<DistributionChartProps> = ({ distributi
           >
             <span style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Primary</span>
             <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }} className="tabular">
-              {distribution[0]?.percentage || 64}%
+              {distribution[0] != null ? `${distribution[0].percentage}%` : '—'}
             </span>
           </div>
         </div>

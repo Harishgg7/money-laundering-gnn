@@ -6,10 +6,11 @@ import { StatusBadge } from '../common/StatusBadge';
 import { NetworkGraph } from '../network/NetworkGraph';
 import { PatternCard } from './PatternCard';
 import { ArrowLeft, ExternalLink, FileText, Eye, AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import { formatAmount } from '../../utils/formatters';
 
 interface InvestigationDetailProps {
   investigation: Investigation;
-  onUpdateStatus: (newStatus: InvestigationStatus) => Promise<void>;
+  onUpdateStatus: (newStatus: InvestigationStatus) => Promise<boolean | void>;
 }
 
 export const InvestigationDetail: React.FC<InvestigationDetailProps> = ({
@@ -18,17 +19,18 @@ export const InvestigationDetail: React.FC<InvestigationDetailProps> = ({
 }) => {
   const navigate = useNavigate();
   const [isUpdating, setIsUpdating] = useState(false);
-
-  const formatAmount = (val: number) => {
-    if (val >= 10000000) return `₹${(val / 10000000).toFixed(2)} Cr`;
-    if (val >= 100000) return `₹${(val / 100000).toFixed(2)} L`;
-    return `$${val.toLocaleString()}`;
-  };
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   const handleStatusChange = async (status: InvestigationStatus) => {
     setIsUpdating(true);
+    setUpdateError(null);
     try {
-      await onUpdateStatus(status);
+      const res = await onUpdateStatus(status);
+      if (res === false) {
+        setUpdateError('Failed to update case status. Please try again.');
+      }
+    } catch (err: any) {
+      setUpdateError(err?.message || 'Failed to update case status. Please try again.');
     } finally {
       setIsUpdating(false);
     }
@@ -295,6 +297,12 @@ export const InvestigationDetail: React.FC<InvestigationDetailProps> = ({
                   <span>Close</span>
                 </button>
               </div>
+
+              {updateError && (
+                <div style={{ color: 'var(--risk-high, #ef4444)', fontSize: 11.5, marginTop: 4 }}>
+                  {updateError}
+                </div>
+              )}
             </div>
           </div>
         </div>

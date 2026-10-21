@@ -32,6 +32,8 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const suggestionsQueryRef = useRef<string>('');
+  const justSelectedRef = useRef<boolean>(false);
 
   // Debounced autocomplete search
   useEffect(() => {
@@ -39,6 +41,12 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
     if (!q || q.length < 2) {
       setSuggestions([]);
       setIsOpen(false);
+      suggestionsQueryRef.current = '';
+      return;
+    }
+
+    if (justSelectedRef.current) {
+      justSelectedRef.current = false;
       return;
     }
 
@@ -47,6 +55,7 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
       try {
         const results = await networkService.searchAccounts(q, 6);
         setSuggestions(results);
+        suggestionsQueryRef.current = q;
         setIsOpen(true);
       } catch {
         setSuggestions([]);
@@ -70,6 +79,7 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
   }, []);
 
   const handleSelect = (accId: string) => {
+    justSelectedRef.current = true;
     onSearchChange(accId);
     setIsOpen(false);
     if (onSelectAccount) {
@@ -80,10 +90,19 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (suggestions.length > 0) {
+      const trimmed = searchQuery.trim();
+      const exactMatch = suggestions.find(
+        (s) => s.accountId.toLowerCase() === trimmed.toLowerCase()
+      );
+      if (exactMatch) {
+        handleSelect(exactMatch.accountId);
+      } else if (
+        suggestions.length > 0 &&
+        suggestionsQueryRef.current.toLowerCase() === trimmed.toLowerCase()
+      ) {
         handleSelect(suggestions[0].accountId);
-      } else if (searchQuery.trim()) {
-        handleSelect(searchQuery.trim());
+      } else if (trimmed) {
+        handleSelect(trimmed);
       }
     } else if (e.key === 'Escape') {
       setIsOpen(false);

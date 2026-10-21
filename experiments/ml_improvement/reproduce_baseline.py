@@ -102,7 +102,8 @@ def main():
         print(f"  R@1%FPR:   {test_m['recall_at_1pct_fpr']:.4f}")
 
     # Save to experiments area
-    ckpt_path = "experiments/ml_improvement/checkpoints/baseline_reproduced.pt"
+    ckpt_path = Path("experiments/ml_improvement/checkpoints/baseline_reproduced.pt")
+    ckpt_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save({
         "model_state": best_state,
         "model_type": "sage",

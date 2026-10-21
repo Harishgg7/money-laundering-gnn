@@ -50,8 +50,6 @@ export const ActivityChart: React.FC<ActivityChartProps> = ({
   }, '');
 
   const formatCurrency = (val: number) => {
-    if (val >= 10000000) return `₹${(val / 10000000).toFixed(1)}Cr`;
-    if (val >= 100000) return `₹${(val / 100000).toFixed(1)}L`;
     if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
     if (val >= 1000) return `$${(val / 1000).toFixed(0)}k`;
     return `$${val}`;

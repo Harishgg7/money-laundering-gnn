@@ -5,8 +5,8 @@
 This experimentation phase evaluated whether the frozen production GraphSAGE baseline could be systematically improved on the 515,088-account IBM AML transaction dataset (`HI-Small_Trans.csv`).
 
 ### Primary Objectives & Results:
-- **Minimum Target**: PR-AUC ≥ 0.38 → **ACHIEVED (0.4125 on Pure GNN, 0.4569 on Hybrid)**
-- **Primary Target**: PR-AUC ≥ 0.40 → **ACHIEVED (0.4125 on Pure GNN, 0.4569 on Hybrid)**
+- **Minimum Target**: PR-AUC ≥ 0.38 → **ACHIEVED (0.4053 3-seed mean on Pure GNN, 0.4569 on Hybrid)**
+- **Primary Target**: PR-AUC ≥ 0.40 → **ACHIEVED (0.4053 3-seed mean on Pure GNN, 0.4569 on Hybrid)**
 - **Stretch Target**: PR-AUC ≥ 0.45 → **ACHIEVED (0.4569 on Hybrid)**
 
 ---
@@ -37,7 +37,7 @@ All experiments were executed with zero data leakage (scalers fit strictly on `t
 | **EXP_000_REPRO** | Exact reproduction run (Seed 42) | **0.3335** | 0.8731 | 0.3819 | 52.28% | 30.08% | 0.3174 | Baseline Verified |
 | **EXP_001_UNDIRECTED** | Baseline 11 feats + Bidirectional Message Passing | **0.3756** | 0.9146 | 0.4102 | 63.52% | 30.29% | 0.3737 | Topology Lift (+0.0336) |
 | **EXP_002_FEAT29_DIR** | 29 Rich AML features on Directed Topology | **0.3725** | 0.9056 | 0.4096 | 53.94% | 33.02% | 0.3885 | Feature Lift (+0.0305) |
-| **EXP_003_FEAT29_UNDIR** | 29 AML features + Bidirectional Message Passing | **0.4125** | **0.9331** | **0.4460** | **63.44%** | **34.38%** | **0.4355** | **Primary Target Passed** |
+| **EXP_003_FEAT29_UNDIR** | 29 AML features + Bidirectional (3-seed mean; selected ckpt=0.4125) | **0.4053** | **0.9256** | **0.4305** | **73.34%** | **30.75%** | **0.3846** | **Primary Target Passed (3-Seed Mean)** |
 | **EXP_004_RESIDUALS** | 29 AML features + Bidirectional + Residual Skips | **0.4089** | 0.9235 | 0.4400 | 64.31% | 33.44% | 0.4302 | Stable Deep GNN |
 | **EXP_005_CAPACITY_256**| Residual GraphSAGE with Hidden Dim 256 | **0.3936** | 0.9156 | 0.4199 | 71.83% | 29.66% | 0.4363 | High Precision |
 | **EXP_006_FOCAL_A80** | Residual GraphSAGE with Focal Alpha=0.80 | **0.4112** | 0.9249 | 0.4399 | **73.17%** | 31.45% | 0.4490 | Top Precision GNN |
@@ -66,13 +66,13 @@ To guarantee that the primary GNN improvement (`EXP_003`) is not the result of l
 
 #### 1. Top Pure GraphSAGE Candidate (`EXP_003_FEAT29_UNDIR`):
 - **Baseline PR-AUC**: 0.3420
-- **Candidate PR-AUC**: **0.4125**
-- **Absolute Improvement**: **+0.0705** (+7.05 percentage points)
-- **Relative Improvement**: **+20.61%**
-- **F1 Score**: 0.3680 → **0.4460** (+21.2%)
-- **Precision**: 57.00% → **63.44%** (+6.44 percentage points)
-- **Recall**: 27.10% → **34.38%** (+7.28 percentage points)
-- **ROC-AUC**: 0.9060 → **0.9331**
+- **Candidate PR-AUC (3-Seed Mean)**: **0.4053** (Selected checkpoint: 0.4125)
+- **Absolute Improvement**: **+0.0633** (3-seed mean) / **+0.0705** (selected checkpoint)
+- **Relative Improvement**: **+18.51%** (3-seed mean) / **+20.61%** (selected checkpoint)
+- **F1 Score**: 0.3680 → **0.4305** (3-seed mean)
+- **Precision**: 57.00% → **73.34%** (3-seed mean)
+- **Recall**: 27.10% → **30.75%** (3-seed mean)
+- **ROC-AUC**: 0.9060 → **0.9256** (3-seed mean)
 
 #### 2. Top End-to-End Hybrid Architecture (`EXP_007_HYBRID_XGB`):
 - **Baseline PR-AUC**: 0.3420
@@ -104,7 +104,7 @@ To guarantee that the primary GNN improvement (`EXP_003`) is not the result of l
 ### Formal Determination: **PROMOTE EXPERIMENTAL MODEL**
 
 The experimental evaluation successfully passed all validation criteria:
-1. **Target Achieved**: Primary target PR-AUC ≥ 0.40 exceeded (**0.4125** on Pure GNN; **0.4569** on Hybrid).
+1. **Target Achieved**: Primary target PR-AUC ≥ 0.40 exceeded (**0.4053** 3-seed mean / 0.4125 selected checkpoint on Pure GNN; **0.4569** on Hybrid).
 2. **Zero Leakage**: All normalizations and thresholds fit on training/validation splits only.
 3. **Multi-Seed Stability**: Verified across seeds 42, 123, 999 with mean **0.4053 ± 0.0015**.
 4. **Balanced Tradeoff**: Precision increased from 57.0% to 63.44%–71.89% while simultaneously increasing recall from 27.1% to 34.38%–37.00%.

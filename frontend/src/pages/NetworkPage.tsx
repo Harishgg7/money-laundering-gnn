@@ -115,7 +115,7 @@ export const NetworkPage: React.FC = () => {
             data={graphData}
             selectedNodeId={selectedNode?.id || null}
             onSelectNode={setSelectedNode}
-            targetAccountId={selectedNode?.accountId || activeAccount || null}
+            targetAccountId={activeAccount || null}
             height="100%"
           />
 

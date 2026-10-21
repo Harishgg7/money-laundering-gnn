@@ -111,6 +111,7 @@ const TraceApp = (() => {
     renderDrawerCases();
     selectCase("CASE_01");
     logAudit("TRACE Forensics Online: 515K accounts monitored, 839 high-risk clusters indexed.");
+    requestAnimationFrame(drawGraph);
   }
 
   // =========================================================================
@@ -411,8 +412,15 @@ const TraceApp = (() => {
     const acc = currentDossier.account_id;
 
     try {
-      await fetch(`/api/case_action?case=${encodeURIComponent(currentKey)}&action=elevate`);
-    } catch (_) {}
+      const res = await fetch(`/api/case_action?case=${encodeURIComponent(currentKey)}&action=elevate`);
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
+      }
+    } catch (_) {
+      setStatus("error", `<span>Failed to escalate case <strong>${cid}</strong>: Case status was not changed.</span>`);
+      setTimeout(() => setStatus(null, ""), 5000);
+      return;
+    }
 
     currentDossier.status = "ELEVATED TO FIU";
     if (cases[currentKey]) cases[currentKey].status = "ELEVATED TO FIU";
@@ -435,8 +443,15 @@ const TraceApp = (() => {
     const acc = currentDossier.account_id;
 
     try {
-      await fetch(`/api/case_action?case=${encodeURIComponent(currentKey)}&action=surveillance`);
-    } catch (_) {}
+      const res = await fetch(`/api/case_action?case=${encodeURIComponent(currentKey)}&action=surveillance`);
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
+      }
+    } catch (_) {
+      setStatus("error", `<span>Failed to place case <strong>${cid}</strong> under surveillance: Case status was not changed.</span>`);
+      setTimeout(() => setStatus(null, ""), 5000);
+      return;
+    }
 
     currentDossier.status = "UNDER SURVEILLANCE";
     if (cases[currentKey]) cases[currentKey].status = "UNDER SURVEILLANCE";
@@ -744,12 +759,10 @@ const TraceApp = (() => {
 
   function replayAnimation() {
     animStart = performance.now();
-    requestAnimationFrame(drawGraph);
   }
 
   function resetCamera() {
     cam = { x: 0, y: 0, zoom: topologyMode === "full" ? 0.85 : 1 };
-    drawGraph(performance.now());
   }
 
   function centerTarget() {
@@ -760,7 +773,6 @@ const TraceApp = (() => {
     cam.zoom = 1.25;
     cam.x = (w / 2) - (t.x * cam.zoom);
     cam.y = (h / 2) - (t.y * cam.zoom);
-    drawGraph(performance.now());
   }
 
   function drawGraph(now) {
@@ -956,7 +968,6 @@ const TraceApp = (() => {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.12 : 0.89;
       cam.zoom = Math.max(0.3, Math.min(3.5, cam.zoom * factor));
-      drawGraph(performance.now());
     }, { passive: false });
 
     window.addEventListener("resize", () => {
@@ -974,7 +985,10 @@ const TraceApp = (() => {
 
     // 1. Check if query matches preloaded cases
     for (const [k, obj] of Object.entries(cases)) {
-      if (obj.account_id.toLowerCase() === q.toLowerCase() || String(obj.node_id) === q || obj.case_id.toLowerCase() === q.toLowerCase()) {
+      const acctMatch = obj.account_id && obj.account_id.toLowerCase() === q.toLowerCase();
+      const nodeMatch = obj.node_id != null && String(obj.node_id) === q;
+      const caseMatch = obj.case_id && obj.case_id.toLowerCase() === q.toLowerCase();
+      if (acctMatch || nodeMatch || caseMatch) {
         selectCase(k);
         return;
       }

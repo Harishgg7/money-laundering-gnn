@@ -11,25 +11,33 @@ import webbrowser
 from pathlib import Path
 from threading import Timer
 
-# Ensure execution with the project's Python environment (.venv or Python 3.12)
+# Ensure execution with the project's Python environment (.venv or venv)
 def _ensure_venv():
+    if os.environ.get("TRACE_VENV_GUARD") == "1":
+        return
     try:
         import numpy
         import torch
     except ImportError:
         root = Path(__file__).resolve().parent
+        current_py = Path(sys.executable).resolve()
         candidates = [
             root / ".venv" / "Scripts" / "python.exe",
+            root / ".venv" / "bin" / "python",
             root / "venv" / "Scripts" / "python.exe",
-            Path(r"C:\Users\harish\AppData\Local\Programs\Python\Python312\python.exe")
+            root / "venv" / "bin" / "python",
         ]
+        env = os.environ.copy()
+        env["TRACE_VENV_GUARD"] = "1"
         for py in candidates:
-            if py.exists():
+            if py.exists() and py.resolve() != current_py:
                 print(f"[*] Switching to Python environment: {py}")
-                res = subprocess.run([str(py), str(Path(__file__).resolve())] + sys.argv[1:])
+                res = subprocess.run([str(py), str(Path(__file__).resolve())] + sys.argv[1:], env=env)
                 sys.exit(res.returncode)
 
 _ensure_venv()
+
+ROOT_DIR = Path(__file__).resolve().parent
 
 from build_enriched_cases import build_cases
 from server import start_server
@@ -43,7 +51,7 @@ def main():
     parser.add_argument("--no-browser", action="store_true", help="Do not auto-open browser tab")
     args = parser.parse_args()
 
-    cases_path = os.path.join("outputs", "enriched_cases.json")
+    cases_path = ROOT_DIR / "outputs" / "enriched_cases.json"
     if args.rebuild_cases or not os.path.exists(cases_path):
         try:
             build_cases()
