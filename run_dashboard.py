@@ -1,64 +1,60 @@
 """
-AEGIS AML - 1-Click Showcase Dashboard Launcher
-Launches the FastAPI backend and opens the interactive dashboard in your browser.
+run_dashboard.py — One-command launcher for TRACE AML Investigation Platform.
+Builds enriched cases if missing and launches the local web server.
 """
+
 import os
-import subprocess
 import sys
-import time
+import argparse
+import subprocess
 import webbrowser
 from pathlib import Path
+from threading import Timer
 
-ROOT = Path(__file__).resolve().parent
-
-# Check for Python 3.12 with PyG installed
-PY312_PATH = Path(r"C:\Users\harish\AppData\Local\Programs\Python\Python312\python.exe")
-python_bin = str(PY312_PATH) if PY312_PATH.exists() else sys.executable
-
-print("=" * 76)
-print("   AEGIS AML — EXPLAINABLE GRAPH NEURAL NETWORK DASHBOARD")
-print("   SRM Institute of Science and Technology · CSE")
-print("   Harish GG · Sibins Koshy · Hemakeshwar")
-print("=" * 76)
-print(f"[*] Python interpreter : {python_bin}")
-print(f"[*] Workspace directory: {ROOT}")
-print(f"[*] Starting server on : http://127.0.0.1:8000")
-print("-" * 76)
-
-import socket
-import threading
-
-def is_port_in_use(port: int = 8000) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(1.0)
-        return s.connect_ex(("127.0.0.1", port)) == 0
-
-server_script = ROOT / "server.py"
-
-if is_port_in_use(8000):
-    print("[*] AEGIS AML server is already active on http://127.0.0.1:8000!")
-    print("[*] Opening dashboard in browser: http://127.0.0.1:8000 ...")
-    webbrowser.open("http://127.0.0.1:8000")
-    print("[*] Press Ctrl+C to exit.")
+# Ensure execution with the project's Python environment (.venv or Python 3.12)
+def _ensure_venv():
     try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\n[!] Exited.")
-        sys.exit(0)
+        import numpy
+        import torch
+    except ImportError:
+        root = Path(__file__).resolve().parent
+        candidates = [
+            root / ".venv" / "Scripts" / "python.exe",
+            root / "venv" / "Scripts" / "python.exe",
+            Path(r"C:\Users\harish\AppData\Local\Programs\Python\Python312\python.exe")
+        ]
+        for py in candidates:
+            if py.exists():
+                print(f"[*] Switching to Python environment: {py}")
+                res = subprocess.run([str(py), str(Path(__file__).resolve())] + sys.argv[1:])
+                sys.exit(res.returncode)
 
-# Open browser after a brief delay
-def open_browser():
-    time.sleep(3)
-    print("[*] Opening browser at http://127.0.0.1:8000 ...")
-    webbrowser.open("http://127.0.0.1:8000")
+_ensure_venv()
 
-threading.Thread(target=open_browser, daemon=True).start()
+from build_enriched_cases import build_cases
+from server import start_server
 
-try:
-    subprocess.run([python_bin, str(server_script)], check=True, cwd=str(ROOT))
-except KeyboardInterrupt:
-    print("\n[!] Dashboard server stopped.")
-except subprocess.CalledProcessError as e:
-    print(f"\n[!] Server process exited with code {e.returncode}.")
 
+
+def main():
+    parser = argparse.ArgumentParser(description="Launch TRACE AML Investigation Dashboard")
+    parser.add_argument("--port", type=int, default=8000, help="Port to run server on (default: 8000)")
+    parser.add_argument("--rebuild-cases", action="store_true", help="Force regeneration of outputs/enriched_cases.json")
+    parser.add_argument("--no-browser", action="store_true", help="Do not auto-open browser tab")
+    args = parser.parse_args()
+
+    cases_path = os.path.join("outputs", "enriched_cases.json")
+    if args.rebuild_cases or not os.path.exists(cases_path):
+        try:
+            build_cases()
+        except Exception as e:
+            print(f"[TRACE] Continuing with pre-embedded verified HI-Small cases ({e})")
+
+    if not args.no_browser:
+        Timer(1.0, lambda: webbrowser.open(f"http://localhost:{args.port}")).start()
+
+    start_server(port=args.port)
+
+
+if __name__ == "__main__":
+    main()

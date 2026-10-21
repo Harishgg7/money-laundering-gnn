@@ -2,14 +2,14 @@
 ### Graph Intelligence for Financial Crime Detection
 
 A presenter's guide for the live demonstration.
-The platform works completely offline via `pitch.html` (double-click to open in any modern browser) or live via the FastAPI server (`http://127.0.0.1:8000/pitch`).
+The platform runs as a single, fully integrated web application on `http://127.0.0.1:8000` via `python run_dashboard.py` (or `npm run dev`).
 
 ---
 
 ## 0. Quick Pre-Demo Checklist (30 seconds)
 
-1. Open **`pitch.html`** in Chrome/Edge/Firefox or visit `http://127.0.0.1:8000/pitch`.
-2. Press **`P`** to toggle **PRESENTATION MODE** (enlarges text and graph viewport for projector screens).
+1. Run `python run_dashboard.py` or visit `http://127.0.0.1:8000`.
+2. Press **`P`** to toggle **PRESENTATION MODE** (enlarges text and graph viewport for projection).
 3. Verify keyboard shortcuts:
    - **`1`** &rarr; Switch to **CASE 01** (Smurfing / Fan-In Hub)
    - **`2`** &rarr; Switch to **CASE 02** (Inflow Aggregation Ring)
@@ -31,7 +31,7 @@ The platform works completely offline via `pitch.html` (double-click to open in 
 > *"Both our MLP baseline and GraphSAGE share identical account-level features. The jump from 48.7% to 57.0% precision — and nearly doubling PR-AUC from 0.184 to 0.342 — isolates the exact value provided by the graph structure."*
 
 ### 1:30 – 3:00 &bull; Click [ INVESTIGATE ACCOUNT ] (Case 01)
-> *"Let's investigate Account `0214-80C1C8AC0`. At the validation-tuned threshold of 0.378, TRACE flags this account with a 94.2% GNN conviction score. Notice the money flow animation: eight distinct feeder accounts funnel small transfers into an intermediary hub, which executes one decisive transfer into the target."*
+> *"Let's investigate Account `0214-80C1C8AC0`. At the validation-tuned threshold of 0.378, TRACE flags this account with a 94.2% GNN model risk score. Notice the money flow animation: eight distinct feeder accounts funnel small transfers into an intermediary hub, which executes one decisive transfer into the target."*
 
 ### 3:00 – 3:40 &bull; Click [ EXPLAIN PREDICTION ]
 > *"Regulators do not accept black-box predictions. GNNExplainer isolates the decisive transaction pathways with quantitative faithfulness (Fidelity+ drop of +0.1141). Compliance officers receive a court-ready audit trail naming the specific counterparties and amounts."*
@@ -123,7 +123,7 @@ When the **AUDIT TRAIL** table appears, say (top row is the most important):
 ## 6. If something breaks (fallback)
 
 - **`demo.py` errors or hangs** → don't debug live. Switch to the dashboard
-  (`pitch.html`) and the pre-generated `outputs\audit_node_496618.png`, and talk
+  (`static/index.html`) and the pre-generated `outputs\audit_node_496618.png`, and talk
   through those instead. The result is identical to what the live run produces.
-- **No internet / dashboard won't load** → `pitch.html` is a local file; open it
+- **No internet / dashboard won't load** → `static/index.html` is a local file; open it
   directly. Fonts fall back gracefully offline.
