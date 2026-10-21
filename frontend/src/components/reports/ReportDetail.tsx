@@ -52,7 +52,9 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
   const riskScore = initialReport?.modelAssessment?.riskScore ?? casePreload?.riskScore;
   const summary = initialReport?.summary ?? casePreload?.summary ?? (casePreload?.accountId ? `Automated compliance investigation opened for subject account ${casePreload.accountId}.` : 'Investigation opened for compliance adjudication.');
   const pattern = initialReport?.observedPattern ?? casePreload?.primaryPattern ?? '';
-  const contributingFactors = initialReport?.whyFlagged || initialReport?.contributingFactors || (casePreload as any)?.whyFlagged || (pattern ? `Observed pattern: ${pattern}` : 'Not available');
+  const whyFlagged = initialReport?.whyFlagged ?? (casePreload as any)?.whyFlagged;
+  const contributingFactors = initialReport?.contributingFactors ?? (pattern ? `Observed pattern: ${pattern}` : undefined);
+  const displayContributingFactors = contributingFactors || whyFlagged || 'Not available';
   const evidence = initialReport?.evidence ?? {
     totalTransferred: casePreload?.totalVolume ?? 0,
     transactionCount: casePreload?.transactionCount ?? 0,
@@ -78,7 +80,7 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
         decision,
         summary,
         observedPattern: pattern || 'Not available',
-        whyFlagged: contributingFactors,
+        whyFlagged: whyFlagged,
         contributingFactors: contributingFactors,
         evidence,
         modelAssessment: {
@@ -385,7 +387,7 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
               <>The GraphSAGE relational neural network evaluation: <b>Not available</b>.</>
             )}
             <div style={{ marginTop: 4 }}>
-              Activity contributing to the model's risk assessment: {contributingFactors}
+              Activity contributing to the model's risk assessment: {displayContributingFactors}
             </div>
           </div>
         </div>

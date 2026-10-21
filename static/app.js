@@ -182,14 +182,23 @@ const TraceApp = (() => {
     const btnExplain = document.getElementById("btn-explain-toggle");
     if (btnExplain) btnExplain.classList.remove("active");
 
-    renderDossier(d);
+    renderDossier(d, caseKey);
     renderDrawerCases();
     logAudit(`Loaded suspicious case: ${d.case_id || caseKey} (Entity: ${d.account_id})`);
   }
 
-  function renderDossier(d) {
+  function renderDossier(d, explicitKey) {
     currentDossier = d;
-    const resolvedKey = d.case_id || (d.account_id ? `CASE_${d.account_id}` : currentKey);
+    let existingKey = explicitKey;
+    if (!existingKey) {
+      for (const [k, v] of Object.entries(cases)) {
+        if (v === d || (v && v.account_id && d && v.account_id === d.account_id)) {
+          existingKey = k;
+          break;
+        }
+      }
+    }
+    const resolvedKey = existingKey || d.case_id || (d.account_id ? `CASE_${d.account_id}` : currentKey);
     currentKey = resolvedKey;
     if (!cases[resolvedKey]) {
       cases[resolvedKey] = d;
@@ -1016,7 +1025,7 @@ const TraceApp = (() => {
       const backendKey = dossier.case_id || (dossier.account_id ? `CASE_${dossier.account_id}` : `CASE_${dossier.node_id}`);
       cases[backendKey] = dossier;
       currentKey = backendKey;
-      renderDossier(dossier);
+      renderDossier(dossier, backendKey);
       renderDrawerCases();
       logAudit(`Investigated account ${dossier.account_id} (Node #${dossier.node_id})`);
     } catch (e) {

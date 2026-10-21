@@ -280,9 +280,15 @@ def generate_report_pdf(report: dict) -> bytes:
         ]
         for p in raw_patterns:
             if isinstance(p, str):
-                p_name = escape_text(p)
-                p_status = "Detected"
-                p_desc = escape_text(f"Pattern '{p}' identified in case records.")
+                p_clean = p.strip()
+                if p_clean.lower() in ("not available", "none identified", "none", "not detected"):
+                    p_name = escape_text(p_clean)
+                    p_status = "Not available" if p_clean.lower() == "not available" else "Not detected"
+                    p_desc = "No anomalous transaction pattern registered."
+                else:
+                    p_name = escape_text(p)
+                    p_status = "Detected"
+                    p_desc = escape_text(f"Pattern '{p}' identified in case records.")
             elif isinstance(p, dict):
                 p_name = escape_text(p.get("pattern", p.get("name", "Unknown Pattern")))
                 p_status = escape_text(p.get("status", "Not detected"))
@@ -298,17 +304,22 @@ def generate_report_pdf(report: dict) -> bytes:
         pattern_data = rows
     else:
         raw_pattern = report.get("observedPattern")
-        has_pattern = bool(raw_pattern and str(raw_pattern).strip() and str(raw_pattern).strip().lower() not in ("none", "none identified", "not available"))
-        if has_pattern:
+        norm = str(raw_pattern).strip().lower() if raw_pattern else ""
+        if norm in ("none", "none identified", "not detected", "no pattern", "none recorded"):
+            pattern_name = escape_text(str(raw_pattern).strip()) if raw_pattern else "None identified"
+            pattern_status = "Not detected"
+            pattern_status_color = "#64748B"
+            pattern_desc = "No anomalous structuring or laundering topology patterns detected."
+        elif not norm or norm == "not available":
+            pattern_name = "Not available"
+            pattern_status = "Not available"
+            pattern_status_color = "#64748B"
+            pattern_desc = "Transaction pattern analysis was not recorded for this subject."
+        else:
             pattern_name = escape_text(str(raw_pattern))
             pattern_status = "Recorded"
             pattern_status_color = "#B45309"
             pattern_desc = f"Pattern '{pattern_name}' registered from case file."
-        else:
-            pattern_name = "None identified"
-            pattern_status = "Not detected"
-            pattern_status_color = "#64748B"
-            pattern_desc = "No anomalous structuring or laundering topology patterns detected."
 
         pattern_data = [
             [

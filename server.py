@@ -69,8 +69,8 @@ def _save_reports_atomic(reports_data: list):
     temp_path = None
     try:
         with tempfile.NamedTemporaryFile("w", dir=dir_name, delete=False, encoding="utf-8") as tf:
-            json.dump(reports_data, tf, indent=2)
             temp_path = tf.name
+            json.dump(reports_data, tf, indent=2)
         os.replace(temp_path, REPORTS_FILE)
         temp_path = None
     finally:
@@ -533,8 +533,8 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
                         "investigatorName": body.get("investigatorName", "Harish GG (Lead AML Investigator)"),
                         "summary": body.get("summary", ""),
                         "observedPattern": body.get("observedPattern", ""),
-                        "whyFlagged": body.get("whyFlagged", body.get("contributingFactors", "")),
-                        "contributingFactors": body.get("contributingFactors", body.get("whyFlagged", "")),
+                        "whyFlagged": body.get("whyFlagged", ""),
+                        "contributingFactors": body.get("contributingFactors", ""),
                         "evidence": body.get("evidence", {}),
                         "modelAssessment": body.get("modelAssessment", {}),
                         "notes": body.get("notes", ""),

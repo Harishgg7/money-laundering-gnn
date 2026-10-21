@@ -48,6 +48,7 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
 
     if (justSelectedRef.current) {
       justSelectedRef.current = false;
+      setIsSearching(false);
       return;
     }
 
