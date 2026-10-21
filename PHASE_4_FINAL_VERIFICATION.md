@@ -46,7 +46,7 @@ The production backend (`server.py`) operates as a standard-library `ThreadingHT
 - **Model Checkpoint Size**: `511,330` bytes (verified)
 - **Top Flagged Accounts**: Returns ranked accounts with canonical account IDs, node IDs, transaction volumes, risk levels (`HIGH`), and calibrated model risk scores (> `0.3781`).
 
-### 3.2 Account Profile Endpoints (`GET /api/accounts/{account_id}` or `GET /api/accounts?account=...` / `?account_id=...`)
+### 3.2 Account Profile Endpoint (`GET /api/accounts/{account_id}`)
 Tested across diverse risk tiers:
 - **High-Risk Account (`8054A41C0`)**:
   - Model Risk Score: `0.4498`
@@ -67,13 +67,13 @@ Tested across diverse risk tiers:
   - Response Body: `{"error": "Account 'NONEXISTENT_999999' not found in the 515K network."}`
   - Zero traceback or internal code structure exposed.
 
-### 3.3 Network Endpoint (`GET /api/network?account=...` or `?account_id=...` or `?target_account=...`)
+### 3.3 Network Endpoint (`GET /api/network/{account}` or `GET /api/network?account=...` / `?account_id=...` / `?q=...`)
 - **Subject-Centered Neighborhood**: Target account is strictly positioned as the root subject node.
 - **Fixed 3-Hop Neighborhood Extraction**: `TraceService.investigate` extracts a fixed 3-hop neighborhood capped at 28 nodes without using depth as a 2-hop bound (with 0 to 55 edges).
 - **Deterministic Ordering**: Repeated calls for the same account return identical node and edge arrays.
 - **Risk Filtering**: `risk_level` filter query parameter (`ALL`, `HIGH`, `MEDIUM`, `LOW`) isolates sub-populations without breaking graph topology.
 
-### 3.4 Search Endpoint (`GET /api/network/search?q=...` or `?account=...`)
+### 3.4 Search Endpoint (`GET /api/network/search?q=...` or `?account_id=...` or `?search=...`)
 - **Prefix / Substring Search**: Returns matching accounts with account ID, internal node index, risk tier, and score using `q` parameter.
 - **Empty / Nonexistent Query**: Clean empty array `[]` returned with HTTP 200.
 

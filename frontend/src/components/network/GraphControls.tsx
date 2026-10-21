@@ -37,6 +37,7 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
 
   // Debounced autocomplete search
   useEffect(() => {
+    let isCancelled = false;
     const q = searchQuery.trim();
     if (!q || q.length < 2) {
       setSuggestions([]);
@@ -54,17 +55,26 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
       setIsSearching(true);
       try {
         const results = await networkService.searchAccounts(q, 6);
-        setSuggestions(results);
-        suggestionsQueryRef.current = q;
-        setIsOpen(true);
+        if (!isCancelled && searchQuery.trim() === q) {
+          setSuggestions(results);
+          suggestionsQueryRef.current = q;
+          setIsOpen(true);
+        }
       } catch {
-        setSuggestions([]);
+        if (!isCancelled) {
+          setSuggestions([]);
+        }
       } finally {
-        setIsSearching(false);
+        if (!isCancelled) {
+          setIsSearching(false);
+        }
       }
     }, 220);
 
-    return () => clearTimeout(timer);
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
   }, [searchQuery]);
 
   // Close dropdown on outside click
@@ -79,8 +89,10 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
   }, []);
 
   const handleSelect = (accId: string) => {
-    justSelectedRef.current = true;
-    onSearchChange(accId);
+    if (accId !== searchQuery) {
+      justSelectedRef.current = true;
+      onSearchChange(accId);
+    }
     setIsOpen(false);
     if (onSelectAccount) {
       onSelectAccount(accId);
@@ -137,7 +149,10 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
             className="input-control"
             placeholder="Search account (e.g. 8054A41C0, 8000323C0)..."
             value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(e) => {
+              justSelectedRef.current = false;
+              onSearchChange(e.target.value);
+            }}
             onKeyDown={handleKeyDown}
             onFocus={() => {
               if (suggestions.length > 0) setIsOpen(true);

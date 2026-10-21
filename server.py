@@ -66,10 +66,19 @@ def get_service() -> TraceService:
 def _save_reports_atomic(reports_data: list):
     dir_name = os.path.dirname(REPORTS_FILE)
     os.makedirs(dir_name, exist_ok=True)
-    with tempfile.NamedTemporaryFile("w", dir=dir_name, delete=False, encoding="utf-8") as tf:
-        json.dump(reports_data, tf, indent=2)
-        temp_name = tf.name
-    os.replace(temp_name, REPORTS_FILE)
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile("w", dir=dir_name, delete=False, encoding="utf-8") as tf:
+            json.dump(reports_data, tf, indent=2)
+            temp_path = tf.name
+        os.replace(temp_path, REPORTS_FILE)
+        temp_path = None
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
 
 
 def sanitize_terminology(obj):
@@ -470,9 +479,14 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
                 if os.path.exists(REPORTS_FILE):
                     try:
                         with open(REPORTS_FILE, "r", encoding="utf-8") as f:
-                            reports = json.load(f)
-                    except Exception:
-                        reports = []
+                            data = json.load(f)
+                        if not isinstance(data, list):
+                            self._send_json(500, {"error": "Invalid reports registry format: expected a list."})
+                            return
+                        reports = data
+                    except Exception as e:
+                        self._send_json(500, {"error": f"Failed to read reports registry: {str(e)}"})
+                        return
 
                 req_id = body.get("id")
                 existing_idx = None
@@ -491,6 +505,12 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
                         r["notes"] = body.get("notes", "")
                     if "summary" in body:
                         r["summary"] = body.get("summary", "")
+                    if "observedPattern" in body:
+                        r["observedPattern"] = body.get("observedPattern", "")
+                    if "whyFlagged" in body:
+                        r["whyFlagged"] = body.get("whyFlagged", "")
+                    if "contributingFactors" in body:
+                        r["contributingFactors"] = body.get("contributingFactors", "")
                     if "status" in body:
                         r["status"] = body.get("status", r.get("status", "Filed"))
                     if "riskLevel" in body:
@@ -513,6 +533,8 @@ class TraceHTTPHandler(SimpleHTTPRequestHandler):
                         "investigatorName": body.get("investigatorName", "Harish GG (Lead AML Investigator)"),
                         "summary": body.get("summary", ""),
                         "observedPattern": body.get("observedPattern", ""),
+                        "whyFlagged": body.get("whyFlagged", body.get("contributingFactors", "")),
+                        "contributingFactors": body.get("contributingFactors", body.get("whyFlagged", "")),
                         "evidence": body.get("evidence", {}),
                         "modelAssessment": body.get("modelAssessment", {}),
                         "notes": body.get("notes", ""),

@@ -32,6 +32,8 @@ export interface Report {
   investigatorName: string;
   summary: string;
   observedPattern: string;
+  whyFlagged?: string;
+  contributingFactors?: string;
   evidence: ReportTransactionEvidence;
   modelAssessment: ReportModelAssessment;
   notes: string;
@@ -47,6 +49,8 @@ export interface CreateReportInput {
   decision: InvestigatorDecision;
   summary: string;
   observedPattern: string;
+  whyFlagged?: string;
+  contributingFactors?: string;
   evidence: ReportTransactionEvidence;
   modelAssessment: ReportModelAssessment;
   notes: string;

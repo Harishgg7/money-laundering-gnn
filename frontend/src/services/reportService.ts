@@ -46,6 +46,8 @@ export const reportService = {
           investigatorName: input.investigatorName || 'Harish GG (Lead AML Investigator)',
           summary: input.summary,
           observedPattern: input.observedPattern,
+          whyFlagged: input.whyFlagged,
+          contributingFactors: input.contributingFactors,
           evidence: input.evidence,
           modelAssessment: input.modelAssessment,
           notes: input.notes,

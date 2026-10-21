@@ -2631,8 +2631,8 @@
         if (selectedTxns.has(t.id)) tr.classList.add('selected');
 
         tr.innerHTML = `
-          <td><input type="checkbox" class="chk-txn" value="${escapeHtml(t.id)}" ${selectedTxns.has(t.id) ? 'checked' : ''} onchange="toggleSelectTxn('${escapeHtml(t.id)}')"></td>
-          <td class="mono" style="font-weight:600; color:var(--primary-blue); cursor:pointer;" onclick="openSidePanel('${escapeHtml(t.id)}')">${escapeHtml(t.id)}</td>
+          <td><input type="checkbox" class="chk-txn" value="${escapeHtml(t.id)}" ${selectedTxns.has(t.id) ? 'checked' : ''} data-action="toggle-select-txn" data-txn-id="${escapeHtml(t.id)}"></td>
+          <td class="mono" style="font-weight:600; color:var(--primary-blue); cursor:pointer;" data-action="open-side-panel" data-txn-id="${escapeHtml(t.id)}">${escapeHtml(t.id)}</td>
           <td style="font-size:12px; color:var(--text-secondary);">${escapeHtml(t.date)}</td>
           <td class="mono">${escapeHtml(t.from)}</td>
           <td><span class="badge ${t.dir === 'INCOMING' ? 'badge-low' : 'badge-med'}">${escapeHtml(t.dir)}</span></td>
@@ -2776,7 +2776,7 @@
           </div>
 
           <div style="margin-top:10px;">
-            <button class="btn btn-primary btn-sm" style="width:100%;" onclick="toggleSelectTxn('${tx.id}'); document.getElementById('btnAddSelectedToEvidence').click(); closeSidePanel();">
+            <button class="btn btn-primary btn-sm" style="width:100%;" data-action="add-side-panel-evidence" data-txn-id="${escapeHtml(tx.id)}">
               Add to Case Evidence
             </button>
           </div>
@@ -2911,12 +2911,44 @@
     // Canvas Events
     
     document.addEventListener('click', (e) => {
-      const target = e.target.closest('[data-action="investigate-case"]');
-      if (target) {
-        const caseKey = target.getAttribute('data-case-key');
+      const invTarget = e.target.closest('[data-action="investigate-case"]');
+      if (invTarget) {
+        const caseKey = invTarget.getAttribute('data-case-key');
         if (caseKey) {
           loadCase(caseKey);
           switchView('case');
+        }
+        return;
+      }
+
+      const panelTarget = e.target.closest('[data-action="open-side-panel"]');
+      if (panelTarget) {
+        const txnId = panelTarget.getAttribute('data-txn-id');
+        if (txnId) {
+          openSidePanel(txnId);
+        }
+        return;
+      }
+
+      const addEvidenceTarget = e.target.closest('[data-action="add-side-panel-evidence"]');
+      if (addEvidenceTarget) {
+        const txnId = addEvidenceTarget.getAttribute('data-txn-id');
+        if (txnId) {
+          toggleSelectTxn(txnId);
+          const btn = document.getElementById('btnAddSelectedToEvidence');
+          if (btn) btn.click();
+          closeSidePanel();
+        }
+        return;
+      }
+    });
+
+    document.addEventListener('change', (e) => {
+      const chk = e.target.closest('[data-action="toggle-select-txn"]');
+      if (chk) {
+        const txnId = chk.getAttribute('data-txn-id');
+        if (txnId) {
+          toggleSelectTxn(txnId);
         }
       }
     });
@@ -3204,14 +3236,14 @@
         c.transactions.forEach(t => {
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td class="mono" style="font-weight:600; color:var(--primary-blue); cursor:pointer;" onclick="openSidePanel('${escapeHtml(t.id)}')">${escapeHtml(t.id)}</td>
+            <td class="mono" style="font-weight:600; color:var(--primary-blue); cursor:pointer;" data-action="open-side-panel" data-txn-id="${escapeHtml(t.id)}">${escapeHtml(t.id)}</td>
             <td style="font-size:12px; color:var(--text-secondary);">${escapeHtml(t.date)}</td>
             <td class="mono">${escapeHtml(t.from)}</td>
             <td><span class="badge ${t.dir === 'INCOMING' ? 'badge-low' : 'badge-med'}">${escapeHtml(t.dir)}</span></td>
             <td class="mono">${escapeHtml(t.to)}</td>
             <td><b>${escapeHtml(t.amount)}</b></td>
             <td><span class="badge ${t.risk === 'HIGH' ? 'badge-high' : 'badge-low'}">${escapeHtml(t.risk)}</span></td>
-            <td><button class="btn btn-secondary btn-sm" onclick="openSidePanel('${escapeHtml(t.id)}')">Inspect</button></td>
+            <td><button class="btn btn-secondary btn-sm" data-action="open-side-panel" data-txn-id="${escapeHtml(t.id)}">Inspect</button></td>
           `;
           tbody.appendChild(tr);
         });
@@ -3316,17 +3348,6 @@
     }
 
     // Initialize Application
-    
-    document.addEventListener('click', (e) => {
-      const target = e.target.closest('[data-action="investigate-case"]');
-      if (target) {
-        const caseKey = target.getAttribute('data-case-key');
-        if (caseKey) {
-          loadCase(caseKey);
-          switchView('case');
-        }
-      }
-    });
 
     window.addEventListener('DOMContentLoaded', () => {
       initNav();

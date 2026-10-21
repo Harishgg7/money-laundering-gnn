@@ -52,7 +52,7 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
   const riskScore = initialReport?.modelAssessment?.riskScore ?? casePreload?.riskScore;
   const summary = initialReport?.summary ?? casePreload?.summary ?? (casePreload?.accountId ? `Automated compliance investigation opened for subject account ${casePreload.accountId}.` : 'Investigation opened for compliance adjudication.');
   const pattern = initialReport?.observedPattern ?? casePreload?.primaryPattern ?? '';
-  const contributingFactors = (casePreload as any)?.whyFlagged || (initialReport as any)?.whyFlagged || (pattern ? `Observed pattern: ${pattern}` : 'Not available');
+  const contributingFactors = initialReport?.whyFlagged || initialReport?.contributingFactors || (casePreload as any)?.whyFlagged || (pattern ? `Observed pattern: ${pattern}` : 'Not available');
   const evidence = initialReport?.evidence ?? {
     totalTransferred: casePreload?.totalVolume ?? 0,
     transactionCount: casePreload?.transactionCount ?? 0,
@@ -78,10 +78,12 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
         decision,
         summary,
         observedPattern: pattern || 'Not available',
+        whyFlagged: contributingFactors,
+        contributingFactors: contributingFactors,
         evidence,
         modelAssessment: {
           riskScore: riskScore,
-          threshold: 0.3781,
+          threshold: initialReport?.modelAssessment?.threshold ?? 0.3781,
           assessmentNote: 'Calculated via 3-hop GraphSAGE inductive message passing.',
         },
         notes,
@@ -378,7 +380,7 @@ export const ReportDetail: React.FC<ReportDetailProps> = ({
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
             {riskScore != null ? (
-              <>The GraphSAGE relational neural network evaluated this account with a model risk score of <b>{Math.round(riskScore * 100)}%</b> (operating threshold: 0.3781).</>
+              <>The GraphSAGE relational neural network evaluated this account with a model risk score of <b>{Math.round(riskScore * 100)}%</b> (operating threshold: {initialReport?.modelAssessment?.threshold ?? 0.3781}).</>
             ) : (
               <>The GraphSAGE relational neural network evaluation: <b>Not available</b>.</>
             )}

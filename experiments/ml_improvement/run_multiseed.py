@@ -28,6 +28,9 @@ def main():
     f1s = []
     precs = []
     recs = []
+    roc_aucs = []
+    thresholds = []
+    training_times = []
 
     for seed in seeds:
         print(f"\n--- Running Seed {seed} ---")
@@ -52,7 +55,7 @@ def main():
             focal_gamma=2.0,
             lr=5e-3,
             weight_decay=5e-4,
-            epochs=60,
+            epochs=15,
             seed=seed,
             feature_desc="29 engineered AML features",
             graph_desc="Bidirectional 2.03M edges (undirected)",

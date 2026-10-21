@@ -220,7 +220,7 @@ def generate_report_pdf(report: dict) -> bytes:
     try:
         thr_str = f"{float(raw_thr):.4f}"
     except (ValueError, TypeError):
-        thr_str = str(raw_thr)
+        thr_str = escape_text(str(raw_thr))
 
     meta_cells = [
         [
@@ -279,10 +279,17 @@ def generate_report_pdf(report: dict) -> bytes:
             ]
         ]
         for p in raw_patterns:
-            p_name = escape_text(p.get("pattern", p.get("name", "Unknown Pattern")))
-            p_status = escape_text(p.get("status", "Not detected"))
-            p_desc = escape_text(p.get("evidence", p.get("description", p.get("notes", "Recorded during analysis."))))
-            color = "#B45309" if p_status in ("Observed", "Detected") else "#64748B"
+            if isinstance(p, str):
+                p_name = escape_text(p)
+                p_status = "Detected"
+                p_desc = escape_text(f"Pattern '{p}' identified in case records.")
+            elif isinstance(p, dict):
+                p_name = escape_text(p.get("pattern", p.get("name", "Unknown Pattern")))
+                p_status = escape_text(p.get("status", "Not detected"))
+                p_desc = escape_text(p.get("evidence", p.get("description", p.get("notes", "Recorded during analysis."))))
+            else:
+                continue
+            color = "#B45309" if p_status in ("Observed", "Detected", "Recorded") else "#64748B"
             rows.append([
                 Paragraph(f"<b>{p_name}</b>", style_body),
                 Paragraph(f"<font color='{color}'><b>{p_status}</b></font>", style_body),
@@ -290,7 +297,19 @@ def generate_report_pdf(report: dict) -> bytes:
             ])
         pattern_data = rows
     else:
-        pattern_name = escape_text(report.get("observedPattern") or "None identified")
+        raw_pattern = report.get("observedPattern")
+        has_pattern = bool(raw_pattern and str(raw_pattern).strip() and str(raw_pattern).strip().lower() not in ("none", "none identified", "not available"))
+        if has_pattern:
+            pattern_name = escape_text(str(raw_pattern))
+            pattern_status = "Recorded"
+            pattern_status_color = "#B45309"
+            pattern_desc = f"Pattern '{pattern_name}' registered from case file."
+        else:
+            pattern_name = "None identified"
+            pattern_status = "Not detected"
+            pattern_status_color = "#64748B"
+            pattern_desc = "No anomalous structuring or laundering topology patterns detected."
+
         pattern_data = [
             [
                 Paragraph("<b>Pattern Typology</b>", style_meta_label),
@@ -299,8 +318,8 @@ def generate_report_pdf(report: dict) -> bytes:
             ],
             [
                 Paragraph(f"<b>{pattern_name}</b>", style_body),
-                Paragraph("<font color='#B45309'><b>Recorded</b></font>", style_body),
-                Paragraph(f"Pattern '{pattern_name}' registered from case file.", style_body)
+                Paragraph(f"<font color='{pattern_status_color}'><b>{pattern_status}</b></font>", style_body),
+                Paragraph(pattern_desc, style_body)
             ]
         ]
     pattern_table = Table(pattern_data, colWidths=[130, 94, 280])

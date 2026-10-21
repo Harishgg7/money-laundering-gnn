@@ -189,6 +189,11 @@ const TraceApp = (() => {
 
   function renderDossier(d) {
     currentDossier = d;
+    const resolvedKey = d.case_id || (d.account_id ? `CASE_${d.account_id}` : currentKey);
+    currentKey = resolvedKey;
+    if (!cases[resolvedKey]) {
+      cases[resolvedKey] = d;
+    }
     if (d.threshold) defaultValThreshold = d.threshold;
     activeThreshold = defaultValThreshold;
 
@@ -408,11 +413,12 @@ const TraceApp = (() => {
   // =========================================================================
   async function elevateActiveCase() {
     if (!currentDossier) return;
-    const cid = currentDossier.case_id || currentKey;
+    const cid = currentDossier.case_id || currentDossier.account_id || currentKey;
     const acc = currentDossier.account_id;
+    const targetKey = currentDossier.case_id || currentKey || acc;
 
     try {
-      const res = await fetch(`/api/case_action?case=${encodeURIComponent(currentKey)}&action=elevate`);
+      const res = await fetch(`/api/case_action?case=${encodeURIComponent(targetKey)}&action=elevate`);
       if (!res.ok) {
         throw new Error(`Server returned HTTP ${res.status}`);
       }
@@ -423,7 +429,7 @@ const TraceApp = (() => {
     }
 
     currentDossier.status = "ELEVATED TO FIU";
-    if (cases[currentKey]) cases[currentKey].status = "ELEVATED TO FIU";
+    if (cases[targetKey]) cases[targetKey].status = "ELEVATED TO FIU";
 
     const statusEl = document.getElementById("dossier-case-status");
     if (statusEl) {
@@ -439,11 +445,12 @@ const TraceApp = (() => {
 
   async function placeUnderSurveillance() {
     if (!currentDossier) return;
-    const cid = currentDossier.case_id || currentKey;
+    const cid = currentDossier.case_id || currentDossier.account_id || currentKey;
     const acc = currentDossier.account_id;
+    const targetKey = currentDossier.case_id || currentKey || acc;
 
     try {
-      const res = await fetch(`/api/case_action?case=${encodeURIComponent(currentKey)}&action=surveillance`);
+      const res = await fetch(`/api/case_action?case=${encodeURIComponent(targetKey)}&action=surveillance`);
       if (!res.ok) {
         throw new Error(`Server returned HTTP ${res.status}`);
       }
@@ -454,7 +461,7 @@ const TraceApp = (() => {
     }
 
     currentDossier.status = "UNDER SURVEILLANCE";
-    if (cases[currentKey]) cases[currentKey].status = "UNDER SURVEILLANCE";
+    if (cases[targetKey]) cases[targetKey].status = "UNDER SURVEILLANCE";
 
     const statusEl = document.getElementById("dossier-case-status");
     if (statusEl) {
@@ -1006,7 +1013,11 @@ const TraceApp = (() => {
       const dossier = await res.json();
       setStatus(null, "");
       explainSpotlight = false;
+      const backendKey = dossier.case_id || (dossier.account_id ? `CASE_${dossier.account_id}` : `CASE_${dossier.node_id}`);
+      cases[backendKey] = dossier;
+      currentKey = backendKey;
       renderDossier(dossier);
+      renderDrawerCases();
       logAudit(`Investigated account ${dossier.account_id} (Node #${dossier.node_id})`);
     } catch (e) {
       setStatus("error", `<span>${e.message || "Account not found in 515K dataset."}</span>`);
